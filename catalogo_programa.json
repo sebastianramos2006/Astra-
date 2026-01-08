@@ -1,0 +1,86 @@
+{
+  "version": "1.0.0",
+  "global": { "resumen_dashboard_en_todos": true },
+  "subprogramas": [
+    {
+      "id": 1,
+      "nombre": "Condiciones Institucionales",
+      "slug": "condiciones_institucionales",
+      "orden": 1,
+      "submodulos": [
+        { "id": 101, "nombre": "Planificación institucional", "slug": "planificacion_institucional", "orden": 1 },
+        { "id": 102, "nombre": "Bienestar universitario", "slug": "bienestar_universitario", "orden": 2 },
+        { "id": 103, "nombre": "Internacionalización y movilidad", "slug": "internacionalizacion_y_movilidad", "orden": 3 },
+        { "id": 104, "nombre": "Infraestructura física y tecnológica", "slug": "infraestructura_fisica_y_tecnologica", "orden": 4 },
+        { "id": 105, "nombre": "Gestión de bibliotecas", "slug": "gestion_de_bibliotecas", "orden": 5 },
+        { "id": 106, "nombre": "Gestión documental y de archivo", "slug": "gestion_documental_y_de_archivo", "orden": 6 },
+        { "id": 107, "nombre": "Igualdad de oportunidades e interculturalidad", "slug": "igualdad_de_oportunidades_e_interculturalidad", "orden": 7 },
+        { "id": 108, "nombre": "Cogobierno", "slug": "cogobierno", "orden": 8 },
+        { "id": 109, "nombre": "Ética y transparencia", "slug": "etica_y_transparencia", "orden": 9 }
+      ]
+    },
+    {
+      "id": 2,
+      "nombre": "Condiciones PA, AA y EST",
+      "slug": "condiciones_pa_aa_y_est",
+      "orden": 2,
+      "submodulos": [
+        { "id": 201, "nombre": "Procesos ING, PER y PROM", "slug": "procesos_ing_per_y_prom", "orden": 1 },
+        { "id": 202, "nombre": "Evaluación integral del personal académico", "slug": "evaluacion_integral_personal_academico", "orden": 2 },
+        { "id": 203, "nombre": "Perfeccionamiento académico", "slug": "perfeccionamiento_academico", "orden": 3 },
+        { "id": 204, "nombre": "Personal académico con formación", "slug": "personal_academico_con_formacion", "orden": 4 },
+        { "id": 205, "nombre": "Personal académico con dedicación tiempo completo", "slug": "personal_academico_dedicacion_tiempo_completo", "orden": 5 },
+        { "id": 206, "nombre": "Aspirantes a estudiantes", "slug": "aspirantes_a_estudiantes", "orden": 6 },
+        { "id": 207, "nombre": "Tasa de deserción institucional (2do año) – Oferta", "slug": "tasa_desercion_institucional_2do_ano_oferta", "orden": 7 },
+        { "id": 208, "nombre": "Proceso de titulación", "slug": "proceso_de_titulacion", "orden": 8 },
+        { "id": 209, "nombre": "Tasa de titulación institucional – Grado", "slug": "tasa_titulacion_institucional_grado", "orden": 9 },
+        { "id": 210, "nombre": "Tasa de titulación institucional – Posgrado", "slug": "tasa_titulacion_institucional_posgrado", "orden": 10 },
+        { "id": 211, "nombre": "Seguimiento a graduados", "slug": "seguimiento_a_graduados", "orden": 11 }
+      ]
+    },
+    {
+      "id": 3,
+      "nombre": "Docencia",
+      "slug": "docencia",
+      "orden": 3,
+      "submodulos": [
+        { "id": 301, "nombre": "Modelo educativo", "slug": "modelo_educativo", "orden": 1 },
+        { "id": 302, "nombre": "Oferta académica", "slug": "oferta_academica", "orden": 2 },
+        { "id": 303, "nombre": "Gestión curricular y resultados de aprendizaje", "slug": "gestion_curricular_y_resultados_de_aprendizaje", "orden": 3 }
+      ]
+    },
+    {
+      "id": 4,
+      "nombre": "Investigación e Innovación",
+      "slug": "investigacion_e_innovacion",
+      "orden": 4,
+      "submodulos": [
+        { "id": 401, "nombre": "Política y planificación de investigación e innovación", "slug": "politica_y_planificacion_investigacion_e_innovacion", "orden": 1 },
+        { "id": 402, "nombre": "Proyectos de investigación e innovación con financiamiento", "slug": "proyectos_investigacion_innovacion_con_financiamiento", "orden": 2 },
+        { "id": 403, "nombre": "Producción académica", "slug": "produccion_academica", "orden": 3 }
+      ]
+    },
+    {
+      "id": 5,
+      "nombre": "Sistema de Gestión de la Calidad",
+      "slug": "sistema_gestion_de_calidad",
+      "orden": 5,
+      "submodulos": [
+        { "id": 501, "nombre": "Aseguramiento de la calidad institucional", "slug": "aseguramiento_calidad_institucional", "orden": 1 },
+        { "id": 502, "nombre": "Autoevaluación institucional", "slug": "autoevaluacion_institucional", "orden": 2 },
+        { "id": 503, "nombre": "Plan de mejora institucional", "slug": "plan_de_mejora_institucional", "orden": 3 }
+      ]
+    },
+    {
+      "id": 6,
+      "nombre": "Vinculación con la Sociedad",
+      "slug": "vinculacion_con_la_sociedad",
+      "orden": 6,
+      "submodulos": [
+        { "id": 601, "nombre": "Gestión de la vinculación con la sociedad", "slug": "gestion_vinculacion_con_la_sociedad", "orden": 1 },
+        { "id": 602, "nombre": "Articulación de la vinculación con la docencia e investigación", "slug": "articulacion_vinculacion_docencia_investigacion", "orden": 2 },
+        { "id": 603, "nombre": "Proyectos de vinculación con la sociedad", "slug": "proyectos_vinculacion_con_la_sociedad", "orden": 3 }
+      ]
+    }
+  ]
+}
