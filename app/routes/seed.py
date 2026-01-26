@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import select
@@ -33,10 +35,10 @@ SUBMODULOS = [
     (204, 2, "Personal académico con formación", "personal_academico_con_formacion", 4),
     (205, 2, "Personal académico con dedicación tiempo completo", "personal_academico_dedicacion_tiempo_completo", 5),
     (206, 2, "Aspirantes a estudiantes", "aspirantes_a_estudiantes", 6),
-    (207, 2, "Tasa de deserción institucional (2do año) – Oferta", "tasa_desercion_institucional_2do_ano_oferta", 7),
+    (207, 2, "Tasa de deserción institucional (2do año)  Oferta", "tasa_desercion_institucional_2do_ano_oferta", 7),
     (208, 2, "Proceso de titulación", "proceso_de_titulacion", 8),
-    (209, 2, "Tasa de titulación institucional – Grado", "tasa_titulacion_institucional_grado", 9),
-    (210, 2, "Tasa de titulación institucional – Posgrado", "tasa_titulacion_institucional_posgrado", 10),
+    (209, 2, "Tasa de titulación institucional  Grado", "tasa_titulacion_institucional_grado", 9),
+    (210, 2, "Tasa de titulación institucional  Posgrado", "tasa_titulacion_institucional_posgrado", 10),
     (211, 2, "Seguimiento a graduados", "seguimiento_a_graduados", 11),
 
     (301, 3, "Modelo educativo", "modelo_educativo", 1),

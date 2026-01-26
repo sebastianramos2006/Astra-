@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # app/routes/catalogo.py
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
