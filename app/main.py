@@ -1,7 +1,7 @@
 # app/main.py
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 
 from app.routes.db import router as db_router
 from app.routes.catalogo import router as catalogo_router
@@ -16,11 +16,13 @@ from app.routes.auth import router as auth_router
 from app.routes.seed_admin import router as seed_admin_router
 from app.routes.admin_usuarios import router as admin_usuarios_router
 from app.routes.admin_delete import router as admin_delete_router
-
-# ✅ AÑADE ESTO
 from app.routes.admin_ies import router as admin_ies_router
 
-app = FastAPI(title="Astra by CEDEPRO", version="0.1.0")
+app = FastAPI(
+    title="Astra by CEDEPRO",
+    version="0.1.0",
+    default_response_class=JSONResponse
+)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
@@ -38,6 +40,7 @@ app.include_router(ui_router)
 app.include_router(admin_usuarios_router)
 app.include_router(admin_ies_router)
 app.include_router(admin_delete_router)
+
 @app.get("/", include_in_schema=False)
 def root():
     return RedirectResponse(url="/app")
