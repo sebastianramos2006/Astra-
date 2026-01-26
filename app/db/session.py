@@ -1,3 +1,9 @@
+import os
+from pathlib import Path
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
+
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if not DATABASE_URL:
@@ -16,3 +22,6 @@ if DATABASE_URL.startswith("postgres://"):
 # 2) si viene sin driver, fuerza psycopg2 (porque tú lo usas en local)
 if DATABASE_URL.startswith("postgresql://") and "+psycopg2" not in DATABASE_URL:
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
+###
+#Correcion de el apartado del os 
+########
