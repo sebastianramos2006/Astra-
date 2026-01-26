@@ -1,3 +1,5 @@
+SET client_encoding = 'UTF8';
+
 BEGIN;
 SET search_path TO public;
 
