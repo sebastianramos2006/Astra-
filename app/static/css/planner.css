@@ -1,0 +1,713 @@
+/* ===========================
+   STAGE HEAD
+=========================== */
+.stage-head{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap: 18px;
+  padding: 12px 4px 16px;
+}
+
+.stage-kicker{
+  font-size: 20px;
+  font-weight: 900;
+  letter-spacing: .2px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.stage-kicker::before{
+  content:"";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(140,160,255,1);
+  box-shadow: 0 0 18px rgba(140,160,255,.9);
+}
+.stage-hint{
+  margin-top: 6px;
+  font-size: 12px;
+  color: rgba(235,240,255,.72);
+}
+
+.stage-right{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ===========================
+   CONSTELLATION AREA
+=========================== */
+.constellation{
+  position: relative;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 22px;
+  background:
+    radial-gradient(900px 380px at 12% 0%, rgba(140,160,255,.16), transparent 62%),
+    radial-gradient(900px 380px at 90% 18%, rgba(255,160,80,.10), transparent 64%),
+    rgba(255,255,255,.03);
+  box-shadow: 0 30px 80px rgba(0,0,0,.35);
+  overflow: hidden;
+}
+
+/* Campo grande para dispersar nodos */
+.constellation-field{
+  position: relative;
+
+  height: min(74vh, 680px);
+  min-height: 600px;
+
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 46px 56px;
+
+  /* ✅ centrado real (sin sesgo) */
+  --field-shift-x: 0px;
+  transform: translateX(var(--field-shift-x));
+}
+
+/* puntitos suaves de fondo */
+.constellation-field::before{
+  content:"";
+  position:absolute; inset:0;
+  background-image: radial-gradient(rgba(255,255,255,.10) 1px, transparent 1px);
+  background-size: 38px 38px;
+  opacity: .12;
+  pointer-events:none;
+}
+
+/* overlay tip */
+.constellation-help{
+  position:absolute;
+  left: 16px;
+  bottom: 14px;
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.18);
+  backdrop-filter: blur(8px);
+}
+.help-dot{
+  width: 8px; height: 8px; border-radius:50%;
+  background: rgba(80,220,140,1);
+  box-shadow: 0 0 16px rgba(80,220,140,.85);
+}
+.help-text{ font-size: 12px; color: rgba(235,240,255,.72); }
+
+/* ===========================
+   SUBPROGRAMA NODES
+=========================== */
+.subp-node{
+  position:absolute;
+
+  /* tamaño estable y legible */
+  width: clamp(230px, 19vw, 300px);
+  height: clamp(165px, 15vw, 215px);
+
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,.12);
+  background:
+    radial-gradient(360px 220px at 20% 20%, rgba(140,160,255,.14), transparent 62%),
+    linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.03));
+  backdrop-filter: blur(10px);
+
+  padding: 14px 14px 12px;
+  cursor:pointer;
+  user-select:none;
+
+  transform: translateZ(0);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+}
+
+.subp-node:hover{
+  transform: translateY(-4px) scale(1.01);
+  border-color: rgba(140,160,255,.55);
+  box-shadow: 0 18px 44px rgba(140,160,255,.12);
+}
+
+.subp-node.active{
+  border-color: rgba(255,160,80,.62);
+  box-shadow: 0 22px 60px rgba(255,160,80,.12);
+  background:
+    radial-gradient(420px 260px at 18% 18%, rgba(255,160,80,.18), transparent 66%),
+    linear-gradient(180deg, rgba(255,255,255,.08), rgba(255,255,255,.03));
+}
+
+/* contenido */
+.subp-top{
+  display:flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+}
+
+.subp-title{
+  font-weight: 900;
+  font-size: 14px;
+  line-height: 1.15;
+  margin: 0;
+}
+
+.subp-desc{
+  margin: 0;
+  font-size: 11px;
+  color: rgba(235,240,255,.70);
+  line-height: 1.35;
+
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+
+  max-height: calc(1.35em * 3);
+}
+
+.subp-chip{
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+
+  font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: rgba(235,240,255,.88);
+}
+
+/* ===========================
+   POSICIONES (FORZADAS) — MÁS ORDENADAS
+   2 filas / 3 columnas con offsets suaves
+=========================== */
+/* TOP ROW */
+#subprogramasField .subp-node:nth-child(1),
+#subprogramasField .subp-node:nth-of-type(1){
+  left: 6% !important;  top: 12% !important;
+}
+#subprogramasField .subp-node:nth-child(2),
+#subprogramasField .subp-node:nth-of-type(2){
+  left: 36% !important; top: 8% !important;   /* un pelín más arriba */
+}
+#subprogramasField .subp-node:nth-child(3),
+#subprogramasField .subp-node:nth-of-type(3){
+  left: 66% !important; top: 14% !important;
+}
+
+/* BOTTOM ROW */
+#subprogramasField .subp-node:nth-child(4),
+#subprogramasField .subp-node:nth-of-type(4){
+  left: 10% !important; top: 58% !important;
+}
+#subprogramasField .subp-node:nth-child(5),
+#subprogramasField .subp-node:nth-of-type(5){
+  left: 40% !important; top: 66% !important;
+}
+#subprogramasField .subp-node:nth-child(6),
+#subprogramasField .subp-node:nth-of-type(6){
+  left: 70% !important; top: 66% !important;
+}
+
+/* micro animación MÁS CONTROLADA (no “caos”) */
+@keyframes floaty {
+  0%   { transform: translateY(0px); }
+  50%  { transform: translateY(-2px); }
+  100% { transform: translateY(0px); }
+}
+.subp-node[data-float="1"]{ animation: floaty 7.2s ease-in-out infinite; }
+.subp-node[data-float="2"]{ animation: floaty 8.0s ease-in-out infinite; }
+.subp-node[data-float="3"]{ animation: floaty 8.8s ease-in-out infinite; }
+
+/* ===========================
+   RESPONSIVE
+=========================== */
+@media (max-width: 1200px){
+  .constellation-field{
+    padding: 40px 42px;
+    min-height: 620px;
+  }
+
+  /* mantiene estructura 2x3 pero compacta */
+  #subprogramasField .subp-node:nth-child(1){ left: 5% !important;  top: 12% !important; }
+  #subprogramasField .subp-node:nth-child(2){ left: 35% !important; top: 8% !important; }
+  #subprogramasField .subp-node:nth-child(3){ left: 65% !important; top: 14% !important; }
+  #subprogramasField .subp-node:nth-child(4){ left: 8% !important;  top: 60% !important; }
+  #subprogramasField .subp-node:nth-child(5){ left: 38% !important; top: 68% !important; }
+  #subprogramasField .subp-node:nth-child(6){ left: 68% !important; top: 68% !important; }
+}
+
+@media (max-width: 992px){
+  .constellation-field{
+    padding: 28px 22px;
+    min-height: 700px;
+  }
+
+  /* 2 columnas + 3 filas (más cómodo) */
+  #subprogramasField .subp-node:nth-child(1){ left: 8% !important;  top: 10% !important; }
+  #subprogramasField .subp-node:nth-child(2){ left: 52% !important; top: 10% !important; }
+  #subprogramasField .subp-node:nth-child(3){ left: 30% !important; top: 32% !important; }
+  #subprogramasField .subp-node:nth-child(4){ left: 8% !important;  top: 56% !important; }
+  #subprogramasField .subp-node:nth-child(5){ left: 52% !important; top: 56% !important; }
+  #subprogramasField .subp-node:nth-child(6){ left: 30% !important; top: 78% !important; }
+}
+
+@media (max-width: 768px){
+  .constellation-field{
+    transform: none;
+    max-width: none;
+    height: auto;
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .subp-node{
+    position: relative;
+    left: auto !important;
+    top: auto !important;
+    width: 100%;
+    height: auto;
+    min-height: 150px;
+    margin-bottom: 14px;
+  }
+  .subp-chip{
+    position: static;
+    align-self: flex-end;
+    margin-top: 10px;
+  }
+}
+
+/* ===========================
+   OFFCANVAS LOOK
+=========================== */
+.astra-offcanvas{
+  background:
+    radial-gradient(700px 360px at 20% 0%, rgba(140,160,255,.16), transparent 60%),
+    rgba(10,14,28,.94);
+  border-left: 1px solid rgba(255,255,255,.10);
+  color: rgba(235,240,255,.92);
+}
+
+.submods-list{
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+}
+
+.subm-item{
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.04);
+  padding: 12px;
+  cursor:pointer;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+.subm-item:hover{
+  transform: translateY(-2px);
+  border-color: rgba(80,220,140,.55);
+  box-shadow: 0 14px 34px rgba(80,220,140,.10);
+}
+.subm-name{ font-weight: 900; font-size: 12.5px; margin:0; }
+.subm-hint{ margin: 6px 0 0; font-size: 11px; color: rgba(235,240,255,.66); }
+
+
+/* =========================================================
+   ASTRA ASSISTANT UI (TOASTS + COACH OVERLAY)
+   - Solo afecta al asistente (A.toast / A.coach / A.coachSteps)
+   - Mantén este bloque al FINAL para prioridad
+========================================================= */
+
+/* ---------- Toasts ---------- */
+.astra-toasts{
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 9998;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  max-width: min(420px, calc(100vw - 28px));
+}
+
+.astra-toast{
+  pointer-events: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.14);
+  background:
+    radial-gradient(520px 220px at 18% 30%, rgba(140,160,255,.18), transparent 60%),
+    rgba(10,14,28,.92);
+  box-shadow: 0 18px 55px rgba(0,0,0,.45);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+  transform: translateY(6px);
+  opacity: 0;
+}
+
+.astra-toast__row{
+  display: grid;
+  grid-template-columns: 46px 1fr 34px;
+  align-items: start;
+  gap: 10px;
+  padding: 12px;
+}
+
+.astra-toast__img{
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.10);
+}
+.astra-toast__img img{
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  filter: drop-shadow(0 10px 20px rgba(0,0,0,.35));
+}
+
+.astra-toast__txt{ min-width: 0; }
+.astra-toast__title{
+  font-weight: 900;
+  font-size: 12.5px;
+  letter-spacing: .2px;
+  color: rgba(255,255,255,.95);
+  margin-top: 2px;
+}
+.astra-toast__msg{
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(235,240,255,.78);
+  overflow-wrap: anywhere;
+}
+
+.astra-toast__actions{
+  display: flex;
+  justify-content: flex-end;
+}
+.astra-toast__close{
+  width: 30px;
+  height: 30px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.92);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.astra-toast__close:hover{
+  background: rgba(255,255,255,.10);
+  border-color: rgba(255,255,255,.22);
+}
+
+@media (max-width: 520px){
+  .astra-toasts{
+    right: 10px;
+    left: 10px;
+    bottom: 10px;
+    max-width: none;
+  }
+}
+
+/* ---------- Coach / Overlay (Astra guía grande) ---------- */
+/* planner.js inyecta CSS del coach; aquí lo “pulimos” con prioridad. */
+
+.astra-coach.hidden{ display:none !important; }
+
+.astra-coach{
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+}
+
+/* Backdrop más suave + viñeta */
+.astra-coach__backdrop{
+  position: absolute !important;
+  inset: 0 !important;
+  background:
+    radial-gradient(900px 520px at 50% 35%, rgba(140,160,255,.14), transparent 60%),
+    rgba(0,0,0,.58) !important;
+  backdrop-filter: blur(8px) !important;
+}
+
+/* Card */
+.astra-coach__card{
+  position: absolute !important;
+  left: 50% !important;
+  top: 50% !important;
+  transform: translate(-50%, -50%) !important;
+
+  width: min(980px, calc(100vw - 28px)) !important;
+  border-radius: 26px !important;
+
+  background:
+    radial-gradient(820px 380px at 18% 18%, rgba(140,160,255,.18), transparent 65%),
+    rgba(10,14,28,.90) !important;
+
+  border: 1px solid rgba(255,255,255,.14) !important;
+  box-shadow: 0 28px 95px rgba(0,0,0,.60) !important;
+  overflow: hidden !important;
+}
+
+.astra-coach__close{
+  position: absolute !important;
+  right: 14px !important;
+  top: 12px !important;
+  width: 40px !important;
+  height: 40px !important;
+  border-radius: 14px !important;
+  border: 1px solid rgba(255,255,255,.16) !important;
+  background: rgba(255,255,255,.06) !important;
+  color: rgba(255,255,255,.92) !important;
+  font-size: 22px !important;
+  cursor: pointer !important;
+}
+.astra-coach__close:hover{
+  background: rgba(255,255,255,.10) !important;
+  border-color: rgba(255,255,255,.24) !important;
+}
+
+.astra-coach__grid{
+  display: grid !important;
+  grid-template-columns: 360px 1fr !important;
+  min-height: 430px !important;
+}
+
+@media (max-width: 860px){
+  .astra-coach__grid{
+    grid-template-columns: 1fr !important;
+    min-height: 0 !important;
+  }
+}
+
+.astra-coach__img{
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  padding: 18px !important;
+  background:
+    radial-gradient(70% 60% at 50% 35%, rgba(255,160,80,.12), transparent 70%),
+    radial-gradient(70% 60% at 50% 35%, rgba(140,160,255,.16), transparent 70%) !important;
+}
+
+.astra-coach__img img{
+  width: min(340px, 90%) !important;
+  height: auto !important;
+  transform: translateY(8px) !important;
+  filter: drop-shadow(0 22px 55px rgba(0,0,0,.55)) !important;
+}
+
+.astra-coach__body{
+  padding: 22px 22px 18px 22px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+}
+
+.astra-coach__title{
+  font-weight: 900 !important;
+  font-size: 1.25rem !important;
+  letter-spacing: .2px !important;
+  color: rgba(255,255,255,.96) !important;
+}
+
+.astra-coach__msg{
+  font-size: 1.02rem !important;
+  line-height: 1.45 !important;
+  color: rgba(235,240,255,.82) !important;
+  white-space: pre-line !important;
+}
+
+.astra-coach__footer{
+  margin-top: auto !important;
+  padding-top: 12px !important;
+  border-top: 1px solid rgba(255,255,255,.10) !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 10px !important;
+  flex-wrap: wrap !important;
+}
+
+.astra-coach__chk{
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  color: rgba(235,240,255,.70) !important;
+  font-size: .92rem !important;
+}
+
+.astra-coach__chk input{
+  accent-color: rgba(140,160,255,1);
+}
+
+.astra-coach__actions{
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+@media (prefers-reduced-motion: reduce){
+  .astra-toast,
+  .astra-coach__card{
+    transition: none !important;
+  }
+}
+/* ==========================================================
+   ASTRA COACH (COMPACTO) — solo Astra + globo pequeño
+   Pegar AL FINAL del planner.css
+========================================================== */
+
+/* 1) Apaga el “modal/backdrop” gigante (si existe) */
+.astra-overlay,
+#astraOverlay,
+.astra-coach-overlay,
+[data-astra-overlay]{
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Si tu guía usa un wrapper enorme tipo modal */
+.astra-guide,
+#astraGuide,
+.astra-coach,
+#astraCoach,
+[data-astra-coach]{
+  position: fixed !important;
+  left: 18px !important;
+  bottom: 18px !important;
+  z-index: 9999 !important;
+
+  /* 🔥 nada de “cuadro enorme” */
+  width: auto !important;
+  max-width: none !important;
+  height: auto !important;
+  padding: 0 !important;
+  margin: 0 !important;
+
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+
+  display: flex !important;
+  align-items: flex-end !important;
+  gap: 12px !important;
+
+  pointer-events: none; /* importante: solo el globo recibe clicks */
+}
+
+/* 2) Astra más grande (imagen/figura) */
+.astra-guide img,
+#astraGuide img,
+.astra-coach img,
+#astraCoach img,
+.astra-avatar img,
+.astra-figure img,
+[data-astra-avatar] img{
+  width: 120px !important;     /* sube/baja según quieras */
+  height: auto !important;
+  display: block !important;
+  filter: drop-shadow(0 18px 28px rgba(0,0,0,.45));
+  pointer-events: none;
+}
+
+/* Si la figura está dentro de un contenedor */
+.astra-avatar,
+.astra-figure,
+#astraAvatar,
+[data-astra-avatar]{
+  width: 120px !important;
+  flex: 0 0 auto !important;
+  pointer-events: none;
+}
+
+/* 3) Globo de texto pequeño tipo tooltip */
+.astra-bubble,
+#astraBubble,
+.astra-card,
+.astra-tooltip,
+[data-astra-bubble]{
+  pointer-events: auto; /* aquí sí se puede clickear (botones) */
+
+  width: min(360px, calc(100vw - 170px)) !important;
+  padding: 12px 14px !important;
+
+  border-radius: 14px !important;
+  border: 1px solid rgba(255,255,255,.10) !important;
+  background: rgba(14,18,34,.92) !important;
+
+  box-shadow:
+    0 20px 55px rgba(0,0,0,.40),
+    0 0 0 1px rgba(255,255,255,.03) inset !important;
+
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+}
+
+/* “Colita” del globo apuntando hacia Astra */
+.astra-bubble::before,
+#astraBubble::before,
+.astra-card::before,
+.astra-tooltip::before,
+[data-astra-bubble]::before{
+  content:"";
+  position: absolute;
+  left: -10px;
+  bottom: 18px;
+  width: 16px;
+  height: 16px;
+  background: rgba(14,18,34,.92);
+  border-left: 1px solid rgba(255,255,255,.10);
+  border-bottom: 1px solid rgba(255,255,255,.10);
+  transform: rotate(45deg);
+  border-radius: 2px;
+}
+
+/* 4) Texto menos “IA gigante”, más compacto */
+.astra-bubble h3,
+.astra-bubble .title,
+#astraBubble h3,
+#astraBubble .title{
+  margin: 0 0 6px !important;
+  font-size: 15px !important;
+  font-weight: 900 !important;
+  letter-spacing: .1px !important;
+}
+.astra-bubble p,
+.astra-bubble .msg,
+#astraBubble p,
+#astraBubble .msg{
+  margin: 0 !important;
+  font-size: 12.5px !important;
+  line-height: 1.35 !important;
+  color: rgba(235,240,255,.82) !important;
+}
+
+/* 5) Botones más pequeños y limpios */
+.astra-bubble .btn,
+.astra-bubble button,
+#astraBubble .btn,
+#astraBubble button{
+  font-size: 12px !important;
+  padding: 8px 12px !important;
+  border-radius: 12px !important;
+}
+
+/* 6) Responsive: en móvil baja tamaño de Astra */
+@media (max-width: 520px){
+  .astra-guide img, #astraGuide img, .astra-coach img, #astraCoach img{
+    width: 96px !important;
+  }
+  .astra-bubble, #astraBubble, .astra-card, .astra-tooltip{
+    width: min(320px, calc(100vw - 130px)) !important;
+  }
+}

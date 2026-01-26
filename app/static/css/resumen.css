@@ -1,0 +1,110 @@
+/* /static/css/resumen.css */
+.resumen-wrap .resumen-card {
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+}
+
+/* Donut (sin librerías) */
+.res-donut {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background:
+    conic-gradient(#2dd4bf var(--deg), rgba(255,255,255,0.10) 0);
+  display: grid;
+  place-items: center;
+  box-shadow: inset 0 0 0 10px rgba(255,255,255,0.08);
+}
+
+.res-donut-inner {
+  width: 92px;
+  height: 92px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.45);
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.res-donut-big {
+  font-size: 26px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1;
+}
+
+.res-donut-sub {
+  font-size: 12px;
+  color: rgba(255,255,255,0.65);
+  margin-top: -4px;
+}
+
+/* Barras verticales */
+.res-bars {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 992px) {
+  .res-bars { grid-template-columns: repeat(2, minmax(160px, 1fr)); }
+}
+@media (max-width: 520px) {
+  .res-bars { grid-template-columns: 1fr; }
+}
+
+.res-barcol {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.res-barhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.res-barlabel {
+  font-size: 12px;
+  color: rgba(255,255,255,0.78);
+}
+
+.res-barbox {
+  height: 120px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.05);
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+}
+
+.res-bar {
+  width: 100%;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12);
+}
+
+/* Colores por nivel */
+.res-tone-def   { background: linear-gradient(180deg, #ff4d4d, #b91c1c); }
+.res-tone-poco  { background: linear-gradient(180deg, #fbbf24, #d97706); }
+.res-tone-cuasi { background: linear-gradient(180deg, #a78bfa, #6d28d9); }
+.res-tone-satis { background: linear-gradient(180deg, #34d399, #15803d); }
+.res-tone-sin   { background: linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0.08)); }
+/* Resumen general table polish */
+#rgTbody tr { cursor: default; }
+#rgTbody tr:hover { background: rgba(255,255,255,.04); }
+
+.table thead th{
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(15,18,28,.92);
+  backdrop-filter: blur(8px);
+}
+
+.table td, .table th{
+  border-color: rgba(255,255,255,.08) !important;
+}

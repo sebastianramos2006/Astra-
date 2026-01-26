@@ -1,0 +1,80 @@
+/* =========================================================
+   FIX SELECTS NATIVOS (Presenta / Valoración) - opciones visibles
+   Pegar al FINAL de operativa.css
+========================================================= */
+
+/* 1) Fuerza al navegador a dibujar el control “en dark” */
+.astra-body select.form-select,
+.astra-body select.form-control,
+.astra-body select{
+  color-scheme: dark;                 /* clave */
+  background-color: rgba(255,255,255,.06) !important;
+  color: rgba(235,240,255,.94) !important;
+  border: 1px solid rgba(255,255,255,.18) !important;
+}
+
+/* 2) Enfocado */
+.astra-body select:focus{
+  border-color: rgba(140,160,255,.55) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 .2rem rgba(140,160,255,.18) !important;
+}
+
+/* 3) Dropdown (options)
+   - Si el navegador respeta dark: fondo oscuro + texto claro
+*/
+.astra-body select option{
+  background: #0b1020 !important;
+  color: rgba(235,240,255,.96) !important;
+}
+
+/* 4) Fallback: si tu navegador insiste en menú CLARO,
+   también garantizamos contraste al pasar el mouse/seleccionar */
+.astra-body select option:checked,
+.astra-body select option:hover{
+  background: rgba(140,160,255,.25) !important;
+  color: rgba(235,240,255,.98) !important;
+}
+/* ===========================
+   FIX SELECT DROPDOWN (Presenta / Valoración)
+   Problema: opciones invisibles en el menú desplegable
+=========================== */
+
+/* fuerza esquema oscuro del navegador (ayuda en Chrome/Edge) */
+:root { color-scheme: dark; }
+html[data-bs-theme="dark"] { color-scheme: dark; }
+
+/* el select cerrado (lo que ves antes de abrirlo) */
+#operativaPanel select,
+#operativaPanel .form-select{
+  background-color: rgba(14, 18, 32, .92) !important;
+  color: rgba(235,240,255,.94) !important;
+  border-color: rgba(255,255,255,.18) !important;
+}
+
+/* el menú desplegable (las opciones) — aquí estaba el problema */
+#operativaPanel select option,
+#operativaPanel .form-select option{
+  /* Fallback ultra legible: muchos navegadores pintan el dropdown blanco sí o sí */
+  background-color: #ffffff !important;
+  color: #0b1020 !important;
+}
+
+/* optgroup por si lo usas */
+#operativaPanel select optgroup,
+#operativaPanel .form-select optgroup{
+  background-color: #ffffff !important;
+  color: #0b1020 !important;
+}
+
+/* cuando está enfocado */
+#operativaPanel select:focus,
+#operativaPanel .form-select:focus{
+  box-shadow: 0 0 0 .2rem rgba(140,160,255,.25) !important;
+  border-color: rgba(140,160,255,.55) !important;
+}
+
+/* por si bootstrap/tu CSS metió bg-transparent y te lo está dañando */
+#operativaPanel .bg-transparent{
+  background-color: rgba(14, 18, 32, .92) !important;
+}

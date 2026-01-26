@@ -1,0 +1,179 @@
+:root{
+  --bg0:#070b16;
+  --bg1:#0b1020;
+  --text: rgba(235,240,255,.94);
+  --muted: rgba(235,240,255,.68);
+  --line: rgba(255,255,255,.10);
+
+  --blue: rgba(140,160,255,1);
+  --orange: rgba(255,160,80,1);
+  --green: rgba(80,220,140,1);
+}
+/* Fuerza controles nativos (select/fecha) en dark */
+:root { color-scheme: dark; }
+html  { color-scheme: dark; }
+body  { color-scheme: dark; }
+.astra-body { color-scheme: dark; }
+
+.astra-body{
+  min-height: 100vh;
+  color: var(--text);
+  background:
+    radial-gradient(900px 520px at 15% 15%, rgba(140,160,255,.18), transparent 60%),
+    radial-gradient(900px 520px at 85% 20%, rgba(255,220,70,.12), transparent 60%),
+    radial-gradient(900px 600px at 50% 85%, rgba(80,220,140,.14), transparent 60%),
+    linear-gradient(180deg, var(--bg0), var(--bg1));
+  overflow-x:hidden;
+}
+
+/* TOPBAR */
+.astra-topbar{
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+  backdrop-filter: blur(10px);
+  background: rgba(10,14,28,.58);
+}
+
+.astra-brand{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  text-decoration:none;
+  color: var(--text);
+}
+.astra-logo{ height: 22px; width:auto; opacity:.92; }
+.astra-brandtext .astra-title{ font-weight: 900; letter-spacing:.4px; line-height:1.1; }
+.astra-brandtext .astra-sub{ font-size: 11px; opacity:.72; margin-top:2px; }
+
+.astra-actions{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.hidden{ display:none !important; }
+
+.astra-pill{
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: rgba(235,240,255,.92);
+}
+
+.astra-select{
+  min-width: 220px;
+  border-radius: 12px !important;
+}
+
+/* MAIN */
+.astra-main{ padding: 18px 16px 34px; }
+.astra-stage{ max-width: 1400px; margin: 0 auto; }
+/* ===========================
+   ASTRA Toasts (emergentes)
+   =========================== */
+.astra-toasts{
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 99999;
+  pointer-events: none;
+}
+
+.astra-toast{
+  pointer-events: auto;
+  width: min(420px, calc(100vw - 36px));
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(12,16,28,.92);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 14px 40px rgba(0,0,0,.45);
+  overflow: hidden;
+  transform: translateY(8px);
+  opacity: 0;
+  animation: astraToastIn .18s ease-out forwards;
+}
+
+@keyframes astraToastIn{
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.astra-toast__row{
+  display: grid;
+  grid-template-columns: 54px 1fr 34px;
+  gap: 12px;
+  padding: 12px 12px 12px 12px;
+  align-items: start;
+}
+
+.astra-toast__img{
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.06);
+  object-fit: cover;
+}
+
+.astra-toast__title{
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: rgba(255,255,255,.92);
+}
+
+.astra-toast__msg{
+  margin-top: 4px;
+  font-size: 13px;
+  color: rgba(255,255,255,.74);
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+
+.astra-toast__close{
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.85);
+  cursor: pointer;
+}
+
+.astra-toast__close:hover{ background: rgba(255,255,255,.10); }
+
+.astra-toast__actions{
+  display: flex;
+  gap: 8px;
+  padding: 0 12px 12px 78px;
+}
+
+.astra-toast__btn{
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: rgba(255,255,255,.85);
+  padding: 7px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.astra-toast__btn:hover{ background: rgba(255,255,255,.10); }
+
+/* tipos */
+.astra-toast--success{ border-color: rgba(80, 200, 140, .30); }
+.astra-toast--info{    border-color: rgba(120, 170, 255, .30); }
+.astra-toast--warn{    border-color: rgba(255, 200, 90, .30); }
+.astra-toast--error{   border-color: rgba(255, 90, 120, .32); }
