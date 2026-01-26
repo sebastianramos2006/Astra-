@@ -1,8 +1,7 @@
 fastapi
 uvicorn[standard]
-pydantic-settings
-python-jose[cryptography]
-passlib[bcrypt]
 SQLAlchemy>=2.0
 psycopg2-binary
-python-multipart
+python-dotenv
+pydantic
+email-validator
