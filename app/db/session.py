@@ -56,6 +56,9 @@ engine = create_engine(
     DATABASE_URL,
     poolclass=NullPool,     # OK para Render free y evita conexiones colgadas
     future=True,
+    connect_args={
+        "options": "-c client_encoding=UTF8"
+    },
 )
 
 # Sesión
