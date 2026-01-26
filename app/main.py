@@ -1,5 +1,5 @@
 # app/main.py
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse, JSONResponse
 
@@ -24,8 +24,22 @@ app = FastAPI(
     default_response_class=JSONResponse
 )
 
+# =========================
+# 🔒 FUERZA UTF-8 EN JSON
+# =========================
+@app.middleware("http")
+async def force_utf8_json(request: Request, call_next):
+    response = await call_next(request)
+    content_type = response.headers.get("content-type", "")
+    if "application/json" in content_type:
+        response.headers["Content-Type"] = "application/json; charset=utf-8"
+    return response
+
+
+# Static
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
+# Routers
 app.include_router(db_router)
 app.include_router(auth_router)
 app.include_router(seed_admin_router)
@@ -41,6 +55,7 @@ app.include_router(admin_usuarios_router)
 app.include_router(admin_ies_router)
 app.include_router(admin_delete_router)
 
+# Root
 @app.get("/", include_in_schema=False)
 def root():
     return RedirectResponse(url="/app")
