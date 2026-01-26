@@ -40,6 +40,38 @@ def _bool_or_none(x):
     return None
 
 
+def _pick_responsable_mas_reciente(rows):
+    """
+    Escoge el responsable del registro con updated_at más reciente.
+    Si no hay updated_at, intenta caer al último con responsable no vacío.
+    """
+    best = None  # (ts, responsable)
+    last_non_empty = None
+
+    for r in rows:
+        resp = (r.get("responsable") or "").strip() if r.get("responsable") is not None else ""
+        if resp:
+            last_non_empty = resp
+
+        u = r.get("updated_at")
+        if not u or not resp:
+            continue
+
+        try:
+            # u puede venir como datetime (ideal). Si viniera como string, esto puede fallar
+            ts = u.timestamp() if hasattr(u, "timestamp") else None
+        except Exception:
+            ts = None
+
+        if ts is None:
+            continue
+
+        if best is None or ts > best[0]:
+            best = (ts, resp)
+
+    return best[1] if best else last_non_empty
+
+
 def _run_resumen(ies_id: int, submodulo_id: int, db: Session):
     sql = text("""
         SELECT
@@ -48,6 +80,7 @@ def _run_resumen(ies_id: int, submodulo_id: int, db: Session):
             er.valoracion      AS valoracion,
             er.presenta        AS presenta,
             er.categoria_si_no AS categoria_si_no,
+            er.responsable     AS responsable,
             er.fecha_inicio    AS fecha_inicio,
             er.fecha_fin       AS fecha_fin,
             er.updated_at      AS updated_at,
@@ -131,6 +164,9 @@ def _run_resumen(ies_id: int, submodulo_id: int, db: Session):
 
         buckets[_bucket_avance(av)] += 1
 
+        responsable = r.get("responsable")
+        responsable = str(responsable).strip() if responsable is not None else ""
+
         registros_out.append({
             "registro_id": r.get("registro_id"),
             "evidencia_id": r.get("evidencia_id"),
@@ -140,6 +176,7 @@ def _run_resumen(ies_id: int, submodulo_id: int, db: Session):
             "valoracion": val,
             "presenta": p,
             "categoria_si_no": c,
+            "responsable": responsable if responsable else None,
             "fecha_inicio": str(fi) if fi is not None else None,
             "fecha_fin": str(ff) if ff is not None else None,
             "updated_at": str(r.get("updated_at")) if r.get("updated_at") is not None else None,
@@ -158,6 +195,8 @@ def _run_resumen(ies_id: int, submodulo_id: int, db: Session):
         fin = f_fin_max.date() if hasattr(f_fin_max, "date") else f_fin_max
         meses_para_finalizar = (fin.year - hoy.year) * 12 + (fin.month - hoy.month)
 
+    responsable_mas_reciente = _pick_responsable_mas_reciente(rows)
+
     return {
         "ies_id": ies_id,
         "submodulo_id": submodulo_id,
@@ -170,6 +209,7 @@ def _run_resumen(ies_id: int, submodulo_id: int, db: Session):
         "presenta": {"si": presenta_si, "no": presenta_no, "sin_dato": presenta_sin_dato},
         "categoria_si_no": {"si": cat_si, "no": cat_no, "sin_dato": cat_sin_dato},
         "avance_rangos": buckets,
+        "responsable_mas_reciente": responsable_mas_reciente,
         "registros": registros_out,
     }
 

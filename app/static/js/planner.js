@@ -1,18 +1,17 @@
 // /static/js/planner.js
 document.addEventListener("DOMContentLoaded", async () => {
+  // ============================================================
+  // ASTRA namespace (single source of truth)
+  // ============================================================
   const A = (window.ASTRA = window.ASTRA || {});
 
-  // Fallback si A.qs no existe
+  // ============================================================
+  // Utils base
+  // ============================================================
   const qs = A.qs
     ? (sel, root = document) => A.qs(sel, root)
     : (sel, root = document) => root.querySelector(sel);
 
-  // Auth gate
-  if (A?.requireAuth && !A.requireAuth()) return;
-
-  // ==========================
-  // Helpers base
-  // ==========================
   function normalize(s) {
     return (s || "")
       .toString()
@@ -34,9 +33,101 @@ document.addEventListener("DOMContentLoaded", async () => {
       }[m]));
   }
 
-  // ==========================
+  function safeJsonParse(s) {
+    try {
+      return JSON.parse(s);
+    } catch {
+      return null;
+    }
+  }
+
+  function getToken() {
+    try {
+      return localStorage.getItem("access_token") || sessionStorage.getItem("access_token") || "";
+    } catch {
+      return "";
+    }
+  }
+
+  function isJwtLike(t) {
+    return !!(t && String(t).split(".").length === 3);
+  }
+
+  // ============================================================
+  // Auth gate (respeta tu A.requireAuth si existe)
+  // ============================================================
+  if (A?.requireAuth && !A.requireAuth()) return;
+
+  // ============================================================
+  // Fallbacks IMPORTANTES para evitar “errores futuros”
+  // - A.api: wrapper fetch JSON con token
+  // - A.parseJwt: decodifica payload del JWT
+  // - A.getRole / A.getRoleRaw: rol desde JWT si no existe función
+  // ============================================================
+  if (typeof A.parseJwt !== "function") {
+    A.parseJwt = function () {
+      const t = getToken();
+      if (!isJwtLike(t)) return null;
+      try {
+        const payload = t.split(".")[1];
+        const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+        return safeJsonParse(json);
+      } catch {
+        return null;
+      }
+    };
+  }
+
+  if (typeof A.getRoleRaw !== "function") {
+    A.getRoleRaw = function () {
+      const p = A.parseJwt?.();
+      return p?.role || p?.rol || p?.tipo || p?.perfil || "";
+    };
+  }
+
+  if (typeof A.getRole !== "function") {
+    A.getRole = function () {
+      return A.getRoleRaw?.() || "";
+    };
+  }
+
+  if (typeof A.api !== "function") {
+    A.api = async function (path, opts = {}) {
+      const base = "";
+      const url = path.startsWith("http") ? path : `${base}${path}`;
+
+      const headers = new Headers(opts.headers || {});
+      if (!headers.has("Content-Type") && opts.method && opts.method !== "GET") {
+        headers.set("Content-Type", "application/json");
+      }
+
+      const t = getToken();
+      if (t && !headers.has("Authorization")) headers.set("Authorization", `Bearer ${t}`);
+
+      const res = await fetch(url, { ...opts, headers });
+
+      const ct = res.headers.get("content-type") || "";
+      const body = ct.includes("application/json")
+        ? await res.json().catch(() => null)
+        : await res.text().catch(() => "");
+
+      if (!res.ok) {
+        const msg =
+          (body && typeof body === "object" && (body.detail || body.message)) ||
+          (typeof body === "string" && body) ||
+          `HTTP ${res.status}`;
+        const err = new Error(msg);
+        err.status = res.status;
+        err.body = body;
+        throw err;
+      }
+      return body;
+    };
+  }
+
+  // ============================================================
   // ✅ TOASTS (alerts pequeños)
-  // ==========================
+  // ============================================================
   function ensureToasts() {
     const wrapId = "astraToasts";
     let wrap = document.getElementById(wrapId);
@@ -103,9 +194,9 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   A.toast = A.toast || toast;
 
-  // ==========================
+  // ============================================================
   // ✅ COACH / OVERLAY GRANDE (compatibilidad)
-  // ==========================
+  // ============================================================
   function ensureCoach() {
     let host = document.getElementById("astraCoach");
     if (host) return host;
@@ -286,7 +377,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     btnOk.onclick = () => {
       try {
-        // ✅ cerrar también marca visto si el usuario lo desea
         if (chk?.checked) localStorage.setItem(key, "1");
       } catch {}
       host.classList.add("hidden");
@@ -465,7 +555,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         opacity:.55;
         cursor:not-allowed;
       }
-      /* ✅ Botón guía flotante (si no existe en tu HTML) */
       .astra-guide-btn{
         position:fixed;
         right:16px;
@@ -499,7 +588,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     host.className = "astra-point hidden";
 
     host.innerHTML = `
-      <div class="astra-point__layer">
+      <div class="astra-point__layer" id="astraPointLayer">
         <div class="astra-point__spot" id="astraPointSpot"></div>
 
         <div class="astra-point__card" id="astraPointCard" role="dialog" aria-modal="true" aria-label="Guía Astra">
@@ -523,6 +612,27 @@ document.addEventListener("DOMContentLoaded", async () => {
     `;
 
     document.body.appendChild(host);
+
+    const layer = host.querySelector("#astraPointLayer");
+    const bubble = host.querySelector("#astraPointBubble");
+    layer?.addEventListener("click", (ev) => {
+      if (!bubble) return;
+      if (bubble.contains(ev.target)) return;
+      host.classList.add("hidden");
+    });
+
+    if (!host.dataset.boundReposition) {
+      host.dataset.boundReposition = "1";
+      const rep = () => {
+        if (host.classList.contains("hidden")) return;
+        const fnName = host.dataset.repositionFn;
+        const fn = fnName && A._repositionFns ? A._repositionFns[fnName] : null;
+        if (typeof fn === "function") fn();
+      };
+      window.addEventListener("resize", rep, { passive: true });
+      window.addEventListener("scroll", rep, { passive: true });
+    }
+
     return host;
   }
 
@@ -540,6 +650,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const spot = host.querySelector("#astraPointSpot");
     const card = host.querySelector("#astraPointCard");
     const bubble = host.querySelector("#astraPointBubble");
+    if (!spot || !card || !bubble) return;
 
     if (!targetEl) {
       spot.style.left = `-9999px`;
@@ -625,7 +736,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // ✅ SINGLE (img configurable)
+  A._repositionFns = A._repositionFns || {};
+
+  function bindReposition(host, fn) {
+    const name = `fn_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    A._repositionFns[name] = fn;
+    host.dataset.repositionFn = name;
+  }
+
   A.coachPoint = function ({
     target,
     title = "ASTRA",
@@ -648,41 +766,35 @@ document.addEventListener("DOMContentLoaded", async () => {
     const btnOk = host.querySelector("#astraPointOk");
     const btnDont = host.querySelector("#astraPointDont");
 
-    btnPrev.style.display = "none";
-    btnNext.style.display = "none";
-    btnOk.style.display = "inline-flex";
+    if (btnPrev) btnPrev.style.display = "none";
+    if (btnNext) btnNext.style.display = "none";
+    if (btnOk) btnOk.style.display = "inline-flex";
 
-    t.textContent = title;
-    m.textContent = msg;
+    if (t) t.textContent = title;
+    if (m) m.textContent = msg;
 
     if (imgEl) {
       imgEl.src = img || "/static/img/astra_saludo.png";
       imgEl.onerror = () => (imgEl.src = "/static/img/astra.png");
     }
 
-    const el = typeof target === "string" ? document.querySelector(target) : target;
+    const resolveTarget = () => (typeof target === "string" ? document.querySelector(target) : target);
+
     host.classList.remove("hidden");
-    placePoint(host, el, prefer);
+    placePoint(host, resolveTarget(), prefer);
 
     const close = () => host.classList.add("hidden");
 
-    // ✅ cerrar NO marca visto (para permitir botón Guía), pero sí el "No mostrar"
-    btnOk.onclick = () => close();
-    btnDont.onclick = () => {
-      setSeen(key);
-      close();
-    };
+    if (btnOk) btnOk.onclick = () => close();
+    if (btnDont)
+      btnDont.onclick = () => {
+        setSeen(key);
+        close();
+      };
 
-    const rep = () => {
-      if (host.classList.contains("hidden")) return;
-      const el2 = typeof target === "string" ? document.querySelector(target) : target;
-      placePoint(host, el2, prefer);
-    };
-    window.addEventListener("resize", rep, { passive: true });
-    window.addEventListener("scroll", rep, { passive: true });
+    bindReposition(host, () => placePoint(host, resolveTarget(), prefer));
   };
 
-  // ✅ STEPS (img por paso)
   A.coachPointSteps = function ({ steps = [], key = "coach_point_steps_seen", force = false } = {}) {
     if (!force && getSeen(key)) return;
     if (!steps.length) return;
@@ -698,18 +810,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     const btnOk = host.querySelector("#astraPointOk");
     const btnDont = host.querySelector("#astraPointDont");
 
-    btnPrev.style.display = "inline-flex";
-    btnNext.style.display = "inline-flex";
-    btnOk.style.display = "inline-flex";
+    if (btnPrev) btnPrev.style.display = "inline-flex";
+    if (btnNext) btnNext.style.display = "inline-flex";
+    if (btnOk) btnOk.style.display = "inline-flex";
 
     let i = 0;
 
     const close = () => host.classList.add("hidden");
 
+    const resolveTarget = (target) => (typeof target === "string" ? document.querySelector(target) : target);
+
     function paint() {
       const s = steps[i] || {};
-      t.textContent = s.title || "ASTRA";
-      m.textContent = s.msg || "";
+      if (t) t.textContent = s.title || "ASTRA";
+      if (m) m.textContent = s.msg || "";
 
       if (imgEl) {
         imgEl.src = s.img || "/static/img/astra_saludo.png";
@@ -718,55 +832,53 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       const target = s.target || null;
       const prefer = s.prefer || "right";
-      const el = typeof target === "string" ? document.querySelector(target) : target;
+      const el = resolveTarget(target);
 
       host.classList.remove("hidden");
       placePoint(host, el || null, prefer);
 
-      btnPrev.disabled = i === 0;
+      if (btnPrev) btnPrev.disabled = i === 0;
+
       const last = i === steps.length - 1;
-      btnNext.style.display = last ? "none" : "inline-flex";
-      btnOk.textContent = last ? "Entendido" : "Cerrar";
+      if (btnNext) btnNext.style.display = last ? "none" : "inline-flex";
+      if (btnOk) btnOk.textContent = last ? "Entendido" : "Cerrar";
+
+      bindReposition(host, () => {
+        const s2 = steps[i] || {};
+        const el2 = resolveTarget(s2.target || null);
+        placePoint(host, el2 || null, s2.prefer || "right");
+      });
     }
 
-    btnPrev.onclick = () => {
-      if (i > 0) {
-        i--;
-        paint();
-      }
-    };
-    btnNext.onclick = () => {
-      if (i < steps.length - 1) {
-        i++;
-        paint();
-      }
-    };
+    if (btnPrev)
+      btnPrev.onclick = () => {
+        if (i > 0) {
+          i--;
+          paint();
+        }
+      };
 
-    // ✅ cerrar manual NO marca visto (para permitir botón Guía)
-    btnOk.onclick = () => close();
-    btnDont.onclick = () => {
-      setSeen(key);
-      close();
-    };
+    if (btnNext)
+      btnNext.onclick = () => {
+        if (i < steps.length - 1) {
+          i++;
+          paint();
+        }
+      };
+
+    if (btnOk) btnOk.onclick = () => close();
+
+    if (btnDont)
+      btnDont.onclick = () => {
+        setSeen(key);
+        close();
+      };
 
     paint();
-
-    const rep = () => {
-      if (host.classList.contains("hidden")) return;
-      const s = steps[i] || {};
-      const target = s.target || null;
-      const prefer = s.prefer || "right";
-      const el = typeof target === "string" ? document.querySelector(target) : target;
-      placePoint(host, el || null, prefer);
-    };
-    window.addEventListener("resize", rep, { passive: true });
-    window.addEventListener("scroll", rep, { passive: true });
   };
 
-  // ✅ helper: mostrar onboarding automático SOLO 1 vez (marca visto al lanzar)
   function showOnboardingOnce(key, runner) {
     if (getSeen(key)) return false;
-    // Marca visto antes de mostrar (evita que se repita por cambiar IES o recargar)
     setSeen(key);
     try {
       runner?.();
@@ -777,9 +889,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // ==========================
+  // ============================================================
   // DOM
-  // ==========================
+  // ============================================================
   const field = qs("#subprogramasField");
   const searchSubp = qs("#searchSubp");
   const btnReset = qs("#btnReset");
@@ -792,11 +904,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const btnResumenGlobal = qs("#btnResumenGlobal");
   const btnLogout = qs("#btnLogout");
 
-  // Panels
   const operativaPanel = qs("#operativaPanel");
   const resumenPanel = qs("#resumenPanel");
 
-  // Offcanvas
   const canvasEl = document.getElementById("submodsCanvas");
   const canvas = canvasEl && window.bootstrap ? new bootstrap.Offcanvas(canvasEl) : null;
 
@@ -806,12 +916,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   const searchSubm = qs("#searchSubm");
   const btnVerResumen = qs("#btnVerResumen");
 
-  // Home container
   const constellation = document.querySelector(".constellation");
 
-  // ==========================
+  // ============================================================
   // LOGOUT (una sola vez)
-  // ==========================
+  // ============================================================
   if (btnLogout && !btnLogout.dataset.wired) {
     btnLogout.dataset.wired = "1";
     btnLogout.addEventListener("click", (ev) => {
@@ -829,25 +938,24 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // ==========================
+  // ============================================================
   // STATE
-  // ==========================
+  // ============================================================
   A.state = A.state || {};
-  A.state.subprogramas = [];
-  A.state.submodulos = [];
-  A.state.activeSubp = null;
-  A.state.activeSubm = null;
+  A.state.subprogramas = Array.isArray(A.state.subprogramas) ? A.state.subprogramas : [];
+  A.state.submodulos = Array.isArray(A.state.submodulos) ? A.state.submodulos : [];
+  A.state.activeSubp = A.state.activeSubp || null;
+  A.state.activeSubm = A.state.activeSubm || null;
 
   A.state.ies = A.state.ies || null;
-  A.state.iesList = A.state.iesList || [];
+  A.state.iesList = Array.isArray(A.state.iesList) ? A.state.iesList : [];
 
-  // ==========================
+  // ============================================================
   // ROLE
-  // ==========================
+  // ============================================================
   function role() {
     const r0 = (typeof A.getRole === "function" ? A.getRole() : A.getRoleRaw?.() || "") || "";
     const r = String(r0).toLowerCase().trim();
-
     if (r === "admin") return "admin";
     if (r === "cliente" || r === "ies") return "ies";
     return r;
@@ -876,7 +984,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     adminIesBar.classList.toggle("hidden", !showAdminBar);
   }
 
-  // HARD RULE: si es IES, la barra admin JAMÁS se ve
   function enforceRoleUI() {
     if (isIES()) {
       setAdminBarVisible(false);
@@ -889,9 +996,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // ==========================
+  // ============================================================
   // ✅ ADMIN LOCK (sin IES)
-  // ==========================
+  // ============================================================
   const isAdminLocked = () => isAdmin() && !A.state?.ies?.id;
 
   function setHidden(el, hidden) {
@@ -935,7 +1042,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function showOnly(panel) {
-    // ✅ si admin no tiene IES, no se muestra nada operativo
     if (isAdminLocked()) {
       resetLockedAdminUI();
       return;
@@ -950,13 +1056,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (constellation) setHidden(constellation, panel !== "home");
   }
 
-  // ==========================
+  // ============================================================
   // ✅ Botón Guía (manual)
-  // - si existe #btnGuia / #btnGuide lo usa
-  // - si no existe, crea uno flotante
-  // ==========================
+  // ============================================================
   function ensureGuideButton() {
-    // intenta usar un botón existente
     const existing = qs("#btnGuia") || qs("#btnGuide");
     if (existing && !existing.dataset.boundGuide) {
       existing.dataset.boundGuide = "1";
@@ -964,7 +1067,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       return existing;
     }
 
-    // crea uno flotante si no existe
     if (document.getElementById("astraGuideBtn")) return document.getElementById("astraGuideBtn");
 
     const b = document.createElement("button");
@@ -978,13 +1080,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function openGuideManual() {
-    // si admin está locked, muestra solo el gate (no la guía de subprogramas)
     if (isAdminLocked()) {
       showAdminGateIfNeeded(true);
       return;
     }
 
-    // guía depende del rol
     if (isIES()) {
       A.coachPointSteps({
         key: "onboarding_ies_point_v2",
@@ -1044,17 +1144,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // ==========================
+  // ============================================================
   // ✅ Admin gate
-  // ==========================
+  // ============================================================
   let adminGateShown = false;
 
   function showAdminGateIfNeeded(forceCoach = false) {
     if (isAdmin() && !A.state.ies?.id) {
-      // ✅ reset duro: nada de tablas/submódulos visibles si no hay IES
       resetLockedAdminUI();
 
-      // guía gate: puede salir siempre que esté locked, pero el coach solo 1 vez
       if (!adminGateShown || forceCoach) {
         if (!forceCoach) adminGateShown = true;
 
@@ -1096,9 +1194,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     return false;
   }
 
-  // ==========================
+  // ============================================================
   // CARDS / NODES
-  // ==========================
+  // ============================================================
   function subpNodeHTML(sp, idx) {
     const pos = POS[idx % POS.length];
     const float = (idx % 3) + 1;
@@ -1126,26 +1224,22 @@ document.addEventListener("DOMContentLoaded", async () => {
     `;
   }
 
-  // ==========================
+  // ============================================================
   // LOADERS
-  // ==========================
+  // ============================================================
   async function loadIESContext() {
     const p = A.parseJwt?.();
-    if (!p) return;
-
     enforceRoleUI();
-    ensureGuideButton(); // ✅ siempre disponible
+    ensureGuideButton();
 
-    // IES
     if (isIES()) {
-      const slug = p.ies_slug || (p.email ? p.email.split("@")[0] : "ies");
-      const nombre = p.ies_nombre || slug;
-      const iesId = p.ies_id ?? p.iesId ?? null;
+      const slug = p?.ies_slug || (p?.email ? String(p.email).split("@")[0] : "ies");
+      const nombre = p?.ies_nombre || slug;
+      const iesId = p?.ies_id ?? p?.iesId ?? p?.iesID ?? null;
 
       A.state.ies = { id: iesId, slug, nombre };
       setUserActive(`Institución activa: ${nombre}`, true);
 
-      // ✅ Onboarding IES: SOLO 1 vez automático
       showOnboardingOnce("onboarding_ies_point_v2", () => {
         A.coachPointSteps({
           key: "onboarding_ies_point_v2",
@@ -1179,7 +1273,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    // ADMIN
     setUserActive("", false);
 
     let list = A.state.iesList;
@@ -1191,14 +1284,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (iesSelect && !iesSelect.dataset.plannerBound) {
       iesSelect.dataset.plannerBound = "1";
 
-      if (!iesSelect.children.length) {
-        iesSelect.innerHTML = [
+      const buildOptions = (arr) =>
+        [
           `<option value="">-- Selecciona una IES --</option>`,
-          ...A.state.iesList.map(
-            (i) => `<option value="${i.id}">${escapeHtml(i.nombre)} (${escapeHtml(i.slug)})</option>`
-          ),
+          ...arr.map((i) => `<option value="${i.id}">${escapeHtml(i.nombre)} (${escapeHtml(i.slug)})</option>`),
         ].join("");
-      }
+
+      iesSelect.innerHTML = buildOptions(A.state.iesList);
 
       iesSelect.addEventListener("change", () => {
         const id = Number(iesSelect.value);
@@ -1215,7 +1307,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             ms: 4200,
           });
 
-          // ✅ Onboarding Admin: SOLO 1 vez automático (NO se repite al cambiar IES)
           showOnboardingOnce("onboarding_admin_point_v2", () => {
             A.coachPointSteps({
               key: "onboarding_admin_point_v2",
@@ -1251,13 +1342,17 @@ document.addEventListener("DOMContentLoaded", async () => {
           setHidden(operativaPanel, true);
           setHidden(resumenPanel, true);
         } else {
-          // ✅ admin quedó “sin IES”: limpiar todo lo que pudo haber quedado visible
           A.state.ies = null;
           setUserActive("", false);
           resetLockedAdminUI();
           showAdminGateIfNeeded();
         }
       });
+
+      if (A.state.ies?.id) {
+        const exists = A.state.iesList.some((x) => Number(x.id) === Number(A.state.ies.id));
+        if (exists) iesSelect.value = String(A.state.ies.id);
+      }
     }
 
     if (iesSearch && !iesSearch.dataset.plannerBound && iesSelect) {
@@ -1270,12 +1365,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         });
 
         const current = iesSelect.value || "";
-        const placeholder = `<option value="">-- Selecciona una IES --</option>`;
         iesSelect.innerHTML = [
-          placeholder,
-          ...filtered.map(
-            (i) => `<option value="${i.id}">${escapeHtml(i.nombre)} (${escapeHtml(i.slug)})</option>`
-          ),
+          `<option value="">-- Selecciona una IES --</option>`,
+          ...filtered.map((i) => `<option value="${i.id}">${escapeHtml(i.nombre)} (${escapeHtml(i.slug)})</option>`),
         ].join("");
 
         iesSelect.value = filtered.some((x) => String(x.id) === current) ? current : "";
@@ -1345,15 +1437,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     } catch {}
   }
 
-  // ==========================
+  // ============================================================
   // ENDPOINT HELPERS
-  // ==========================
+  // ============================================================
   function evidenciasUrlForSubmodulo(submoduloId) {
-    if (isIES()) return `/operacion/submodulos/${submoduloId}/evidencias`;
     const slug = A.state.ies?.slug;
+    if (!slug) return `/operacion/ies//submodulos/${submoduloId}/evidencias`;
     return `/operacion/ies/${slug}/submodulos/${submoduloId}/evidencias`;
   }
 
+  // ✅ FIX: Admin e IES tienen rutas distintas en resumen.py
   function resumenUrlForSubmodulo(submoduloId) {
     if (isIES()) return `/api/resumen/submodulo/${submoduloId}`;
     const iesId = A.state.ies?.id;
@@ -1375,9 +1468,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // ==========================
+  // ============================================================
   // OPERATIVA UI
-  // ==========================
+  // ============================================================
   function operativaShellHTML() {
     const sm = A.state.activeSubm;
     const iesName = A.state.ies?.nombre || A.state.ies?.slug || "—";
@@ -1388,9 +1481,9 @@ document.addEventListener("DOMContentLoaded", async () => {
           <div>
             <div class="text-secondary small">Operativa</div>
             <h4 class="mb-1">${escapeHtml(sm?.nombre || "Submódulo")}</h4>
-            <div class="text-secondary small">IES: ${escapeHtml(
-              iesName
-            )} · Submódulo #${escapeHtml(String(sm?.id || "—"))}</div>
+            <div class="text-secondary small">IES: ${escapeHtml(iesName)} · Submódulo #${escapeHtml(
+      String(sm?.id || "—")
+    )}</div>
           </div>
           <div class="d-flex gap-2">
             <button id="btnBackToMap" class="btn btn-outline-light btn-sm">Volver al mapa</button>
@@ -1474,7 +1567,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const avance = Number(r.avance_pct ?? 0);
 
     return `
-      <tr data-eid="${evidenciaId}">
+      <tr data-eid="${escapeHtml(String(evidenciaId ?? ""))}">
         <td class="small">${escapeHtml(titulo)}</td>
 
         <td>
@@ -1496,12 +1589,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         <td>
           <input type="date" class="form-control form-control-sm bg-transparent text-light border-secondary op-inicio"
-                 value="${inicio}">
+                 value="${escapeHtml(inicio)}">
         </td>
 
         <td>
           <input type="date" class="form-control form-control-sm bg-transparent text-light border-secondary op-fin"
-                 value="${fin}">
+                 value="${escapeHtml(fin)}">
         </td>
 
         <td>
@@ -1552,6 +1645,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       if (opStatus) opStatus.textContent = `Evidencias: ${(rows || []).length}`;
 
+      // bind UNA SOLA VEZ (delegación)
       if (tbody && !tbody.dataset.bound) {
         tbody.dataset.bound = "1";
         tbody.addEventListener("click", async (ev) => {
@@ -1572,7 +1666,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             responsable: tr.querySelector(".op-responsable")?.value || "",
             fecha_inicio: tr.querySelector(".op-inicio")?.value || null,
             fecha_fin: tr.querySelector(".op-fin")?.value || null,
-            avance_pct: Number(tr.querySelector(".op-avance")?.value || 0),
+            avance_pct: Math.max(0, Math.min(100, Number(tr.querySelector(".op-avance")?.value || 0))),
           };
 
           try {
@@ -1595,15 +1689,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     } catch (e) {
       console.error(e);
       if (opStatus) opStatus.textContent = "Error cargando evidencias.";
-      if (tbody) {
-        tbody.innerHTML = `<tr><td colspan="8" class="text-danger small">No se pudo cargar evidencias.</td></tr>`;
-      }
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-danger small">No se pudo cargar evidencias.</td></tr>`;
     }
   }
 
-  // ==========================
+  // ============================================================
   // RESUMEN (submódulo)
-  // ==========================
+  // ============================================================
   async function openResumenFromPlanner(submodulo) {
     if (isAdminLocked()) {
       showAdminGateIfNeeded();
@@ -1645,9 +1737,8 @@ document.addEventListener("DOMContentLoaded", async () => {
             <div>
               <div class="text-secondary small">Resumen</div>
               <h4 class="mb-1">${escapeHtml(submodulo?.nombre || "Submódulo")}</h4>
-              <div class="text-secondary small">IES: ${escapeHtml(
-                A.state.ies?.nombre || A.state.ies?.slug || "—"
-              )} · Submódulo #${escapeHtml(String(submodulo?.id || "—"))}</div>
+              <div class="text-secondary small">IES: ${escapeHtml(A.state.ies?.nombre || A.state.ies?.slug || "—")}
+                · Submódulo #${escapeHtml(String(submodulo?.id || "—"))}</div>
             </div>
             <button id="btnBackFallback" class="btn btn-outline-light btn-sm">Volver</button>
           </div>
@@ -1667,9 +1758,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // ==========================
+  // ============================================================
   // RESUMEN GENERAL
-  // ==========================
+  // ============================================================
   function fmtDate(s) {
     if (!s) return "—";
     const d = String(s).slice(0, 10);
@@ -1730,6 +1821,7 @@ document.addEventListener("DOMContentLoaded", async () => {
               <tr>
                 <th style="min-width:260px;">Subprograma</th>
                 <th style="min-width:320px;">Submódulo</th>
+                  <th style="min-width:190px;">Responsable</th>
                 <th class="text-end" style="min-width:110px;">Evidencias</th>
                 <th class="text-end" style="min-width:90px;">Avance</th>
                 <th style="min-width:150px;">Últ. actualización</th>
@@ -1737,7 +1829,7 @@ document.addEventListener("DOMContentLoaded", async () => {
               </tr>
             </thead>
             <tbody id="rgTbody">
-              <tr><td colspan="6" class="text-secondary">Cargando…</td></tr>
+              <tr><td colspan="7" class="text-secondary">Cargando…</td></tr>
             </tbody>
           </table>
         </div>
@@ -1838,18 +1930,20 @@ document.addEventListener("DOMContentLoaded", async () => {
             const sm = escapeHtml(r.row.smName);
 
             if (!r.ok) {
-              return `
+             return `
               <tr>
                 <td style="opacity:.85;">${sp}</td>
-                <td>${sm}</td>
-                <td class="text-end text-secondary">—</td>
-                <td class="text-end text-secondary">—</td>
-                <td class="text-secondary small">Error</td>
+                <td style="font-weight:700;">${sm}</td>
+                <td class="text-secondary small">${escapeHtml(responsable)}</td>
+                <td class="text-end">${evid}</td>
+                <td class="text-end">${Math.round(av)}%</td>
+                <td class="text-secondary small">${escapeHtml(lastUpd)}</td>
                 <td class="text-end">
                   <button class="btn btn-outline-light btn-sm rg-open" data-smid="${r.row.smId}">Ver</button>
                 </td>
               </tr>
             `;
+
             }
 
             const data = r.data || {};
@@ -1858,17 +1952,17 @@ document.addEventListener("DOMContentLoaded", async () => {
             const lastUpd = fmtDate(pickLastUpdated(Array.isArray(data?.registros) ? data.registros : []));
 
             return `
-            <tr>
-              <td style="opacity:.85;">${sp}</td>
-              <td style="font-weight:700;">${sm}</td>
-              <td class="text-end">${evid}</td>
-              <td class="text-end">${Math.round(av)}%</td>
-              <td class="text-secondary small">${escapeHtml(lastUpd)}</td>
-              <td class="text-end">
-                <button class="btn btn-outline-light btn-sm rg-open" data-smid="${r.row.smId}">Ver</button>
-              </td>
-            </tr>
-          `;
+              <tr>
+                <td style="opacity:.85;">${sp}</td>
+                <td style="font-weight:700;">${sm}</td>
+                <td class="text-end">${evid}</td>
+                <td class="text-end">${Math.round(av)}%</td>
+                <td class="text-secondary small">${escapeHtml(lastUpd)}</td>
+                <td class="text-end">
+                  <button class="btn btn-outline-light btn-sm rg-open" data-smid="${r.row.smId}">Ver</button>
+                </td>
+              </tr>
+            `;
           })
           .join("");
 
@@ -1898,9 +1992,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // ==========================
+  // ============================================================
   // EVENTS (MAP + DRAWER)
-  // ==========================
+  // ============================================================
   field?.addEventListener("click", async (ev) => {
     if (isAdminLocked()) {
       showAdminGateIfNeeded();
@@ -1913,9 +2007,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const id = Number(node.dataset.id);
     setActiveSubp(id);
 
-    if (submodulosList) {
-      submodulosList.innerHTML = `<div class="text-secondary small">Cargando submódulos…</div>`;
-    }
+    if (submodulosList) submodulosList.innerHTML = `<div class="text-secondary small">Cargando submódulos…</div>`;
     openSubmodsDrawer();
     await loadSubmodulos(id);
   });
@@ -1991,9 +2083,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!showAdminGateIfNeeded()) showOnly("home");
   });
 
-  // ==========================
+  // ============================================================
   // INIT
-  // ==========================
+  // ============================================================
   try {
     enforceRoleUI();
 
@@ -2011,7 +2103,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     renderSubprogramas();
     enforceRoleUI();
-    ensureGuideButton(); // ✅ por si el DOM tardó en cargar algo
+    ensureGuideButton();
   } catch (err) {
     console.error(err);
     if (field) field.innerHTML = `<div class="text-danger small">Error cargando subprogramas.</div>`;
