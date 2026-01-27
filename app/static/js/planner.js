@@ -902,35 +902,58 @@ async function ensureIESResolved() {
     } catch {}
   }
 
-  // ============================================================
-  // Endpoint helpers
-  // ============================================================
-  function evidenciasUrlForSubmodulo(submoduloId) {
-    const slug = A.state.ies?.slug;
-    if (!slug) throw new Error("Falta ies.slug para cargar evidencias.");
-    return `/operacion/ies/${slug}/submodulos/${submoduloId}/evidencias`;
+ // ============================================================
+// Endpoint helpers (CORREGIDO: IES vs Admin)
+// ============================================================
+function evidenciasUrlForSubmodulo(submoduloId) {
+  // ✅ IES (cliente): endpoint permitido (NO usa slug)
+  if (isIES()) {
+    return `/operacion/submodulos/${submoduloId}/evidencias`;
   }
 
-  function resumenUrlForSubmodulo(submoduloId) {
-    const iesId = A.state.ies?.id || (typeof A.getIesId === "function" ? A.getIesId() : null);
-    if (!iesId) throw new Error("Falta ies_id para cargar resumen.");
-    return `/api/resumen/submodulo/${iesId}/${submoduloId}`;
-  }
+  // ✅ Admin: endpoint con slug (admin-only)
+  const slug = A.state.ies?.slug;
+  if (!slug) throw new Error("Falta ies.slug para cargar evidencias (Admin).");
+  return `/operacion/ies/${slug}/submodulos/${submoduloId}/evidencias`;
+}
 
-  async function fetchEvidencias(submoduloId) {
-    return await A.api(evidenciasUrlForSubmodulo(submoduloId));
-  }
+function resumenUrlForSubmodulo(submoduloId) {
+  // Resumen usa ies_id (sirve para IES y Admin)
+  const iesId =
+    A.state.ies?.id ||
+    (typeof A.getIesId === "function" ? A.getIesId() : null);
 
-  async function fetchResumenSubmodulo(submoduloId) {
-    return await A.api(resumenUrlForSubmodulo(submoduloId));
-  }
+  if (!iesId) throw new Error("Falta ies_id para cargar resumen.");
+  return `/api/resumen/submodulo/${iesId}/${submoduloId}`;
+}
 
-  async function saveEvidenciaPatch(evidenciaId, payload) {
+async function fetchEvidencias(submoduloId) {
+  return await A.api(evidenciasUrlForSubmodulo(submoduloId));
+}
+
+async function fetchResumenSubmodulo(submoduloId) {
+  return await A.api(resumenUrlForSubmodulo(submoduloId));
+}
+
+async function saveEvidenciaPatch(evidenciaId, payload) {
+  // ✅ IES: PATCH permitido (no usa slug)
+  if (isIES()) {
     return await A.api(`/operacion/evidencias/${evidenciaId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
   }
+
+  // ✅ Admin: PATCH con slug (admin-only)
+  const slug = A.state.ies?.slug;
+  if (!slug) throw new Error("Falta ies.slug para guardar evidencia (Admin).");
+
+  return await A.api(`/operacion/ies/${slug}/evidencias/${evidenciaId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 
   // ============================================================
   // Operativa (solo IES)

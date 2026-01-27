@@ -2,7 +2,7 @@
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
-
+from app.models.ies import IES 
 from app.db.session import get_db
 from app.core.security import decode_token
 from app.models.usuarios import Usuario
@@ -51,5 +51,29 @@ def require_ies_user(user: Usuario = Depends(get_current_user)) -> Usuario:
 
     if user.ies_id is None:
         raise HTTPException(status_code=403, detail="Usuario no tiene IES asignada")
+
+    return user
+def require_admin_or_same_ies(
+    ies_slug: str,
+    db: Session = Depends(get_db),
+    user: Usuario = Depends(get_current_user),
+) -> Usuario:
+    rol = (user.rol or "").lower().strip()
+
+    # Admin pasa siempre
+    if rol == "admin":
+        return user
+
+    # Solo IES/cliente pueden pasar aquí
+    if rol not in ("ies", "cliente"):
+        raise HTTPException(status_code=403, detail="Requiere rol admin")
+
+    if user.ies_id is None:
+        raise HTTPException(status_code=403, detail="Usuario no tiene IES asignada")
+
+    # Validar que el slug del path sea el mismo de su IES real
+    ies = db.query(IES).filter(IES.id == user.ies_id).first()
+    if not ies or (ies.slug or "").strip() != (ies_slug or "").strip():
+        raise HTTPException(status_code=403, detail="No autorizado para esa IES")
 
     return user
