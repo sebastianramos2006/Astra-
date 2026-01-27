@@ -647,41 +647,43 @@ function toastCompat({
   // ============================================================
   //  NUEVO: resolver IES automáticamente por ies_id -> /ies/
   // ============================================================
-  async function ensureIESResolved() {
-    if (A.state?.ies?.slug) return A.state.ies;
+async function ensureIESResolved() {
+  if (A.state?.ies?.slug) return A.state.ies;
 
-    const ctx = resolveIESContextFromCoreAndJwt();
-    A.state.ies = ctx;
+  const ctx = resolveIESContextFromCoreAndJwt();
+  A.state.ies = ctx;
 
-    // Si tengo id pero no slug: resolver consultando /ies/
-    if (!A.state.ies.slug && A.state.ies.id) {
-      try {
-        const list = await A.api("/ies/");
-        const found = Array.isArray(list)
-          ? list.find((x) => Number(x.id) === Number(A.state.ies.id))
-          : null;
+  // 🚫 IES no puede consultar /ies/ (admin-only)
+  if (isIES()) return A.state.ies;
 
-        if (found?.slug) {
-          A.state.ies = {
-            ...A.state.ies,
-            slug: found.slug,
-            nombre: found.nombre || A.state.ies.nombre,
-            _source: "ies-list-by-id",
-            _trusted: true,
-          };
-          try {
-            localStorage.setItem("ies_slug", found.slug);
-            localStorage.setItem("ies_id", String(found.id));
-          } catch {}
-          return A.state.ies;
-        }
-      } catch (e) {
-        console.warn("No se pudo resolver ies_slug usando /ies/:", e);
+  // ✅ Admin: si tengo id pero no slug, resuelvo consultando /ies/
+  if (!A.state.ies.slug && A.state.ies.id) {
+    try {
+      const list = await A.api("/ies/");
+      const found = Array.isArray(list)
+        ? list.find((x) => Number(x.id) === Number(A.state.ies.id))
+        : null;
+
+      if (found?.slug) {
+        A.state.ies = {
+          ...A.state.ies,
+          slug: found.slug,
+          nombre: found.nombre || A.state.ies.nombre,
+          _source: "ies-list-by-id",
+          _trusted: true,
+        };
+        try {
+          localStorage.setItem("ies_slug", found.slug);
+          localStorage.setItem("ies_id", String(found.id));
+        } catch {}
       }
+    } catch (e) {
+      console.warn("No se pudo resolver ies_slug usando /ies/:", e);
     }
-
-    return A.state.ies;
   }
+
+  return A.state.ies;
+}
 
   // ============================================================
   // Loaders: IES context + IES list (admin)
