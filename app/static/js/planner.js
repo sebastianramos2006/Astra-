@@ -54,12 +54,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // Auth gate (respeta tu A.requireAuth si existe)
+  // Auth gate
   // ============================================================
   if (A?.requireAuth && !A.requireAuth()) return;
 
   // ============================================================
-  // Fallbacks IMPORTANTES (NO pisan si ya existen en core.js)
+  // Fallbacks IMPORTANTES (no pisan si ya existen en core.js)
   // ============================================================
   if (typeof A.parseJwt !== "function") {
     A.parseJwt = function () {
@@ -122,7 +122,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // ✅ TOASTS (si core.js ya trae A.toast, no lo piso)
+  // Toasts (si core.js ya trae A.toast, no lo piso)
   // ============================================================
   function ensureToasts() {
     const wrapId = "astraToasts";
@@ -220,7 +220,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const constellation = document.querySelector(".constellation");
 
   // ============================================================
-  // LOGOUT (una sola vez)
+  // Logout (una sola vez)
   // ============================================================
   if (btnLogout && !btnLogout.dataset.wired) {
     btnLogout.dataset.wired = "1";
@@ -236,7 +236,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // STATE
+  // State
   // ============================================================
   A.state = A.state || {};
   A.state.subprogramas = Array.isArray(A.state.subprogramas) ? A.state.subprogramas : [];
@@ -244,11 +244,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   A.state.activeSubp = A.state.activeSubp || null;
   A.state.activeSubm = A.state.activeSubm || null;
 
-  A.state.ies = A.state.ies || null;
+  A.state.ies = A.state.ies || null;      // {id, slug, nombre, _source, _trusted}
   A.state.iesList = Array.isArray(A.state.iesList) ? A.state.iesList : [];
 
   // ============================================================
-  // ROLE
+  // Role helpers
   // ============================================================
   function role() {
     const r0 = (typeof A.getRole === "function" ? A.getRole() : A.getRoleRaw?.() || "") || "";
@@ -257,9 +257,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (r === "cliente" || r === "ies") return "ies";
     return r;
   }
-
   const isAdmin = () => role() === "admin";
   const isIES = () => role() === "ies";
+
+  function getDisplayName() {
+    const p = A.parseJwt?.();
+    const raw = p?.nombre || p?.name || p?.usuario || p?.email || "";
+    if (!raw) return "👋";
+    const s = String(raw);
+    if (s.includes("@")) return s.split("@")[0];
+    return s;
+  }
 
   function setUserActive(text, show = true) {
     if (!userActive) return;
@@ -285,7 +293,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // ✅ ADMIN LOCK (sin IES)
+  // Admin lock (sin IES seleccionada)
   // ============================================================
   const isAdminLocked = () => isAdmin() && !A.state?.ies?.id;
 
@@ -322,21 +330,24 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     setHidden(operativaPanel, true);
     setHidden(resumenPanel, true);
-    if (constellation) setHidden(constellation, true);
 
+    if (constellation) setHidden(constellation, true);
     if (field) field.innerHTML = "";
   }
 
-  // ✅ PATCH: Admin nunca muestra home con subprogramas
+  // ============================================================
+  // showOnly
+  // - Admin: nunca muestra módulos/operativa; solo resumen.
+  // - IES: home/operativa/resumen
+  // ============================================================
   function showOnly(panel) {
     if (isAdminLocked()) {
       resetLockedAdminUI();
       return;
     }
 
-    // Admin: solo trabaja con resumen (general o por submódulo desde RG)
     if (isAdmin()) {
-      // ocultar todo lo de módulos
+      // Admin: apaga constelación + subprogramas + operativa siempre
       if (constellation) setHidden(constellation, true);
       if (field) field.innerHTML = "";
       if (searchSubp) searchSubp.value = "";
@@ -347,30 +358,54 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    // IES normal
+    // IES
     const operativaIsVisible = panel === "operativa";
     const resumenIsVisible = panel === "resumen";
 
     setHidden(operativaPanel, !operativaIsVisible);
     setHidden(resumenPanel, !resumenIsVisible);
-
     if (constellation) setHidden(constellation, panel !== "home");
   }
 
   // ============================================================
-  // Admin gate
+  // Error helper (401/403)
   // ============================================================
-  let adminGateShown = false;
-
-  function getDisplayName() {
-    const p = A.parseJwt?.();
-    const raw = p?.nombre || p?.name || p?.usuario || p?.email || "";
-    if (!raw) return "👋";
-    const s = String(raw);
-    if (s.includes("@")) return s.split("@")[0];
-    return s;
+  function toastHttpError(e, context = "") {
+    const status = e?.status;
+    if (status === 401) {
+      A.toast({
+        type: "warning",
+        title: "Sesión",
+        msg: "Tu sesión expiró o no es válida. Vuelve a iniciar sesión.",
+        ms: 6500,
+      });
+      return;
+    }
+    if (status === 403) {
+      const src = A.state?.ies?._trusted ? "IES confirmada" : "IES NO confirmada (slug derivado)";
+      A.toast({
+        type: "danger",
+        title: "Permisos (403)",
+        msg:
+          (context ? `${context}. ` : "") +
+          `El backend rechazó el acceso. ${src}. ` +
+          `Esto pasa cuando el token no corresponde a la IES/slug usados en la ruta.`,
+        ms: 8500,
+      });
+      return;
+    }
+    A.toast({
+      type: "danger",
+      title: "Error",
+      msg: (context ? `${context}. ` : "") + (e?.message || "Falló la operación."),
+      ms: 7000,
+    });
   }
 
+  // ============================================================
+  // Admin gate message
+  // ============================================================
+  let adminGateShown = false;
   function showAdminGateIfNeeded() {
     if (isAdmin() && !A.state.ies?.id) {
       resetLockedAdminUI();
@@ -389,23 +424,108 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // LOADERS
+  // IES context resolver (robusto)
+  // prioridad: JWT claims -> /auth/me (si existe) -> /ies/ (si permitido) -> fallback email (NO confiable)
+  // ============================================================
+  async function resolveIESContextFromBackend(p) {
+    // 1) JWT claims (ideal)
+    const iesId = p?.ies_id ?? p?.iesId ?? p?.iesID ?? null;
+    let slug = p?.ies_slug ?? p?.iesSlug ?? null;
+    let nombre = p?.ies_nombre ?? p?.iesNombre ?? null;
+
+    if (slug || nombre || iesId) {
+      // si trae slug en JWT, lo consideramos confiable
+      if (slug) {
+        return { id: iesId, slug, nombre: nombre || slug, _source: "jwt", _trusted: true };
+      }
+      // si trae id/nombre pero no slug, seguimos buscando
+    }
+
+    // 2) /auth/me (si existe)
+    try {
+      const me = await A.api("/auth/me");
+      const mid = me?.ies_id ?? me?.iesId ?? me?.iesID ?? iesId ?? null;
+      const mslug = me?.ies_slug ?? me?.iesSlug ?? null;
+      const mnom = me?.ies_nombre ?? me?.iesNombre ?? null;
+
+      if (mslug) return { id: mid, slug: mslug, nombre: mnom || mslug, _source: "/auth/me", _trusted: true };
+      // si no hay slug, seguimos
+    } catch (e) {
+      // 404 esperado en tu caso; ignoramos
+      if (e?.status && e.status !== 404) console.warn("/auth/me error:", e);
+    }
+
+    // 3) /ies/ para mapear id -> slug (si rol IES tiene permiso)
+    if (iesId) {
+      try {
+        const list = await A.api("/ies/");
+        const found = Array.isArray(list) ? list.find((x) => Number(x.id) === Number(iesId)) : null;
+        if (found?.slug) {
+          return {
+            id: found.id ?? iesId,
+            slug: found.slug,
+            nombre: found.nombre || found.slug,
+            _source: "/ies/",
+            _trusted: true,
+          };
+        }
+      } catch (e) {
+        // si /ies/ está restringido para IES, caerá aquí
+        console.warn("No se pudo resolver slug vía /ies/:", e);
+      }
+    }
+
+    // 4) fallback por email (NO confiable)
+    const email = p?.email || p?.usuario || "";
+    const fallbackSlug = email && String(email).includes("@") ? String(email).split("@")[0] : null;
+    if (fallbackSlug) {
+      return { id: iesId, slug: fallbackSlug, nombre: nombre || fallbackSlug, _source: "email-fallback", _trusted: false };
+    }
+
+    // sin nada
+    return { id: iesId, slug: null, nombre: nombre || null, _source: "none", _trusted: false };
+  }
+
+  // ============================================================
+  // Loaders: IES context + IES list (admin)
   // ============================================================
   async function loadIESContext() {
     const p = A.parseJwt?.();
     enforceRoleUI();
 
     if (isIES()) {
-      const slug = p?.ies_slug || (p?.email ? String(p.email).split("@")[0] : "ies");
-      const nombre = p?.ies_nombre || slug;
-      const iesId = p?.ies_id ?? p?.iesId ?? p?.iesID ?? null;
+      const ctx = await resolveIESContextFromBackend(p || {});
+      A.state.ies = ctx.slug ? ctx : { ...ctx, slug: null };
 
-      A.state.ies = { id: iesId, slug, nombre };
-      setUserActive(`Institución activa: ${nombre}`, true);
+      if (ctx.slug) {
+        setUserActive(`Institución activa: ${ctx.nombre || ctx.slug}`, true);
+
+        // Aviso si es fallback (puede causar 403)
+        if (!ctx._trusted) {
+          A.toast({
+            type: "warning",
+            title: "Token incompleto",
+            msg:
+              "No encontré ies_slug en el token ni pude obtenerlo del backend. " +
+              "Usaré un slug derivado del correo; si no coincide con la IES real, el backend devolverá 403.",
+            ms: 9000,
+          });
+        }
+      } else {
+        setUserActive("Institución activa: (sin slug)", true);
+        A.toast({
+          type: "danger",
+          title: "Falta ies_slug",
+          msg:
+            "No se pudo determinar la IES (slug). No se podrán cargar evidencias. " +
+            "Solución: agregar ies_slug al JWT o crear /auth/me (o /ies/me).",
+          ms: 10000,
+        });
+      }
       return;
     }
 
-    // Admin
+    // Admin: carga lista IES
     setUserActive("", false);
 
     let list = A.state.iesList;
@@ -428,7 +548,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       iesSelect.addEventListener("change", async () => {
         const id = Number(iesSelect.value);
         const found = A.state.iesList.find((x) => Number(x.id) === id) || null;
-        A.state.ies = found;
+        A.state.ies = found ? { ...found, _source: "admin-select", _trusted: true } : null;
 
         if (found) {
           setUserActive(`IES activa: ${found.nombre} (${found.slug})`, true);
@@ -438,9 +558,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             msg: `${found.nombre} (${found.slug}). Abriendo Resumen general…`,
             ms: 3200,
           });
-
-          // ✅ PATCH: En Admin, al seleccionar IES abrimos directamente el Resumen General
-          try { await openResumenGeneral(); } catch {}
+          try { await openResumenGeneral(); } catch (e) { toastHttpError(e, "No se pudo abrir Resumen general"); }
         } else {
           A.state.ies = null;
           setUserActive("", false);
@@ -449,6 +567,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
       });
 
+      // re-hidratar
       if (A.state.ies?.id) {
         const exists = A.state.iesList.some((x) => Number(x.id) === Number(A.state.ies.id));
         if (exists) iesSelect.value = String(A.state.ies.id);
@@ -477,17 +596,54 @@ document.addEventListener("DOMContentLoaded", async () => {
     showAdminGateIfNeeded();
   }
 
-  // ✅ PATCH: Subprogramas SOLO para IES (admin no los usa)
+  // ============================================================
+  // Subprogramas/submódulos (solo IES)
+  // ============================================================
+  const POS = [
+    { left: "10%", top: "18%" },
+    { left: "38%", top: "16%" },
+    { left: "68%", top: "28%" },
+    { left: "18%", top: "58%" },
+    { left: "46%", top: "66%" },
+    { left: "76%", top: "72%" },
+  ];
+
+  function subpNodeHTML(sp, idx) {
+    const pos = POS[idx % POS.length];
+    const float = (idx % 3) + 1;
+
+    return `
+      <div class="subp-node" data-id="${sp.id}" data-float="${float}"
+           style="left:${pos.left}; top:${pos.top};">
+        <div class="subp-top">
+          <div>
+            <h3 class="subp-title">${escapeHtml(sp.nombre)}</h3>
+            <p class="subp-desc">Explorar submódulos y gestionar evidencias.</p>
+          </div>
+          <div class="subp-chip">#${idx + 1}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function submItemHTML(sm) {
+    return `
+      <div class="subm-item" data-id="${sm.id}">
+        <h4 class="subm-name">${escapeHtml(sm.nombre)}</h4>
+        <p class="subm-hint">Abrir operativa (inputs) · o ver resumen</p>
+      </div>
+    `;
+  }
+
   async function loadSubprogramas() {
     if (!isIES()) {
       A.state.subprogramas = [];
+      if (constellation) setHidden(constellation, true);
       if (field) {
         field.innerHTML = `<div class="text-secondary small">
-          <b>Modo Admin:</b> aquí no se navegan subprogramas/submódulos.<br>
-          Selecciona una IES y usa <b>Resumen general</b>.
+          <b>Modo Admin:</b> selecciona una IES y usa <b>Resumen general</b>.
         </div>`;
       }
-      if (constellation) setHidden(constellation, true);
       return;
     }
 
@@ -499,7 +655,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   function renderSubprogramas() {
     if (!field) return;
 
-    // ✅ PATCH: Admin nunca renderiza subprogramas
     if (!isIES()) {
       if (constellation) setHidden(constellation, true);
       field.innerHTML = `<div class="text-secondary small">
@@ -510,40 +665,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     const q = normalize(searchSubp?.value);
     const list = A.state.subprogramas.filter((sp) => !q || normalize(sp.nombre).includes(q));
-
-    // Mantengo tu HTML original de nodos (no toco estética)
-    const POS = [
-      { left: "10%", top: "18%" },
-      { left: "38%", top: "16%" },
-      { left: "68%", top: "28%" },
-      { left: "18%", top: "58%" },
-      { left: "46%", top: "66%" },
-      { left: "76%", top: "72%" },
-    ];
-    function subpNodeHTML(sp, idx) {
-      const pos = POS[idx % POS.length];
-      const float = (idx % 3) + 1;
-      return `
-        <div class="subp-node" data-id="${sp.id}" data-float="${float}"
-             style="left:${pos.left}; top:${pos.top};">
-          <div class="subp-top">
-            <div>
-              <h3 class="subp-title">${escapeHtml(sp.nombre)}</h3>
-              <p class="subp-desc">Explorar submódulos y gestionar evidencias.</p>
-            </div>
-            <div class="subp-chip">#${idx + 1}</div>
-          </div>
-        </div>
-      `;
-    }
-
     field.innerHTML = list.map((sp, idx) => subpNodeHTML(sp, idx)).join("");
 
     if (A.state.activeSubp) {
       const el = field.querySelector(`.subp-node[data-id="${A.state.activeSubp.id}"]`);
       if (el) el.classList.add("active");
     }
-
     if (constellation) setHidden(constellation, false);
   }
 
@@ -557,14 +684,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!submodulosList) return;
     const q = normalize(searchSubm?.value);
     const list = A.state.submodulos.filter((sm) => !q || normalize(sm.nombre).includes(q));
-    submodulosList.innerHTML = list
-      .map((sm) => `
-        <div class="subm-item" data-id="${sm.id}">
-          <h4 class="subm-name">${escapeHtml(sm.nombre)}</h4>
-          <p class="subm-hint">Abrir operativa (inputs) · o ver resumen</p>
-        </div>
-      `)
-      .join("");
+    submodulosList.innerHTML = list.map(submItemHTML).join("");
   }
 
   function setActiveSubp(subprogramaId) {
@@ -586,7 +706,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // ENDPOINT HELPERS
+  // Endpoint helpers
   // ============================================================
   function evidenciasUrlForSubmodulo(submoduloId) {
     const slug = A.state.ies?.slug;
@@ -616,12 +736,20 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // OPERATIVA (solo IES)
+  // Operativa (solo IES)
   // ============================================================
   async function openOperativa(submodulo) {
-    // ✅ PATCH: Admin NO entra a operativa
     if (!isIES()) {
       A.toast({ type: "warning", title: "Modo Admin", msg: "El Admin no llena operativa. Usa Resumen general.", ms: 4200 });
+      return;
+    }
+    if (!A.state.ies?.slug) {
+      A.toast({
+        type: "danger",
+        title: "Sin IES (slug)",
+        msg: "No se puede cargar operativa porque no se conoce el ies_slug. Revisa JWT o agrega /auth/me.",
+        ms: 9000,
+      });
       return;
     }
 
@@ -638,7 +766,9 @@ document.addEventListener("DOMContentLoaded", async () => {
           <div>
             <div class="text-secondary small">Operativa</div>
             <h4 class="mb-1">${escapeHtml(submodulo?.nombre || "Submódulo")}</h4>
-            <div class="text-secondary small">IES: ${escapeHtml(iesName)} · Submódulo #${escapeHtml(String(submodulo?.id || "—"))}</div>
+            <div class="text-secondary small">
+              IES: ${escapeHtml(iesName)} · Submódulo #${escapeHtml(String(submodulo?.id || "—"))}
+            </div>
           </div>
           <div class="d-flex gap-2">
             <button id="btnBackToMap" class="btn btn-outline-light btn-sm">Volver</button>
@@ -799,6 +929,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             setTimeout(() => { btn.textContent = "Guardar"; btn.disabled = false; }, 900);
           } catch (e) {
             console.error(e);
+            toastHttpError(e, "No se pudo guardar evidencia");
             btn.textContent = "Error";
             setTimeout(() => { btn.textContent = "Guardar"; btn.disabled = false; }, 1200);
           }
@@ -806,13 +937,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     } catch (e) {
       console.error(e);
+      toastHttpError(e, "No se pudo cargar evidencias");
       if (opStatus) opStatus.textContent = "Error cargando evidencias.";
       if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-danger small">No se pudo cargar evidencias.</td></tr>`;
     }
   }
 
   // ============================================================
-  // RESUMEN (submódulo)
+  // Resumen (submódulo)
   // ============================================================
   async function openResumenFromPlanner(submodulo) {
     if (isAdminLocked()) {
@@ -855,8 +987,10 @@ document.addEventListener("DOMContentLoaded", async () => {
             <div>
               <div class="text-secondary small">Resumen</div>
               <h4 class="mb-1">${escapeHtml(submodulo?.nombre || "Submódulo")}</h4>
-              <div class="text-secondary small">IES: ${escapeHtml(A.state.ies?.nombre || A.state.ies?.slug || "—")}
-                · Submódulo #${escapeHtml(String(submodulo?.id || "—"))}</div>
+              <div class="text-secondary small">
+                IES: ${escapeHtml(A.state.ies?.nombre || A.state.ies?.slug || "—")}
+                · Submódulo #${escapeHtml(String(submodulo?.id || "—"))}
+              </div>
             </div>
             <button id="btnBackFallback" class="btn btn-outline-light btn-sm">Volver</button>
           </div>
@@ -870,6 +1004,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
     } catch (e) {
       console.error(e);
+      toastHttpError(e, "No se pudo cargar el resumen");
       resumenPanel.innerHTML = `
         <div class="container-fluid mt-3">
           <div class="text-danger small">No se pudo cargar el resumen.</div>
@@ -884,7 +1019,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // RESUMEN GENERAL (Admin + IES)
+  // Resumen general (Admin + IES)
   // ============================================================
   function fmtDate(s) {
     if (!s) return "—";
@@ -906,7 +1041,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     return best?.raw || null;
   }
 
-  // ✅ PATCH: responsable (primer no vacío)
   function pickResponsable(registros = []) {
     for (const r of registros) {
       const v = (r?.responsable ?? "").toString().trim();
@@ -977,12 +1111,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!resumenPanel) return;
 
     if (isAdminLocked()) {
-      A.toast({
-        type: "warning",
-        title: "Falta IES",
-        msg: "Selecciona una IES para abrir el Resumen general.",
-        ms: 4200,
-      });
+      A.toast({ type: "warning", title: "Falta IES", msg: "Selecciona una IES para abrir el Resumen general.", ms: 4200 });
       showAdminGateIfNeeded();
       return;
     }
@@ -997,7 +1126,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     resumenPanel.innerHTML = resumenGeneralShellHTML(iesNombre, iesId);
     document.getElementById("btnBackRG")?.addEventListener("click", () => {
       if (isIES()) showOnly("home");
-      else showOnly("home"); // admin home = solo bar, sin módulos
+      else showOnly("home"); // admin home = solo barra + mensaje
     });
 
     const rgProgress = document.getElementById("rgProgress");
@@ -1061,7 +1190,6 @@ document.addEventListener("DOMContentLoaded", async () => {
             const sp = escapeHtml(r.row.spName);
             const sm = escapeHtml(r.row.smName);
 
-            // ✅ PATCH: branch !ok ya no usa variables inexistentes
             if (!r.ok) {
               return `
                 <tr>
@@ -1115,6 +1243,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     } catch (e) {
       console.error(e);
+      toastHttpError(e, "No se pudo construir el resumen general");
       if (rgTbody) {
         rgTbody.innerHTML = `
           <tr>
@@ -1129,10 +1258,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // EVENTS (MAP + DRAWER) — SOLO IES
+  // Events (map + drawer) — SOLO IES
   // ============================================================
   field?.addEventListener("click", async (ev) => {
-    if (!isIES()) return; // ✅ PATCH: admin no navega
+    if (!isIES()) return;
+
     const node = ev.target.closest(".subp-node");
     if (!node) return;
 
@@ -1141,7 +1271,14 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if (submodulosList) submodulosList.innerHTML = `<div class="text-secondary small">Cargando submódulos…</div>`;
     openSubmodsDrawer();
-    await loadSubmodulos(id);
+
+    try {
+      await loadSubmodulos(id);
+    } catch (e) {
+      console.error(e);
+      toastHttpError(e, "No se pudieron cargar submódulos");
+      if (submodulosList) submodulosList.innerHTML = `<div class="text-danger small">Error cargando submódulos.</div>`;
+    }
   });
 
   searchSubp?.addEventListener("input", () => { if (isIES()) renderSubprogramas(); });
@@ -1149,6 +1286,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   submodulosList?.addEventListener("click", async (ev) => {
     if (!isIES()) return;
+
     const item = ev.target.closest(".subm-item");
     if (!item) return;
 
@@ -1229,7 +1367,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    // Admin: home es solo barra + botón resumen (sin constelación)
+    // Admin: home es solo barra + mensaje
     if (isAdmin()) {
       if (constellation) setHidden(constellation, true);
       if (field) {
