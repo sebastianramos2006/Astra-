@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ASTRA namespace (single source of truth)
   // ============================================================
   const A = (window.ASTRA = window.ASTRA || {});
+  A.state = A.state || {};
 
   // ============================================================
   // Utils base
@@ -88,7 +89,11 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   if (typeof A.getRole !== "function") {
     A.getRole = function () {
-      return A.getRoleRaw?.() || "";
+      const r0 = A.getRoleRaw?.() || "";
+      const r = String(r0).toLowerCase().trim();
+      if (r === "admin") return "admin";
+      if (r === "cliente" || r === "ies") return "ies";
+      return r;
     };
   }
 
@@ -195,92 +200,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   A.toast = A.toast || toast;
 
   // ============================================================
-  // Coach simple (Astra grande + burbuja chica)
-  // ============================================================
-  if (!A.coach) {
-    A.coach = {
-      show({ target, msg, pose = "/static/img/astra_point.png", align = "right" } = {}) {
-        const old = document.getElementById("astraCoach");
-        if (old) old.remove();
-
-        const t = typeof target === "string" ? document.querySelector(target) : target;
-        const rect = t?.getBoundingClientRect?.() || null;
-
-        const overlay = document.createElement("div");
-        overlay.id = "astraCoach";
-        overlay.style.position = "fixed";
-        overlay.style.inset = "0";
-        overlay.style.zIndex = "9999";
-        overlay.style.background = "rgba(0,0,0,.28)";
-        overlay.style.backdropFilter = "blur(2px)";
-
-        const card = document.createElement("div");
-        card.style.position = "fixed";
-        card.style.maxWidth = "320px";
-        card.style.padding = "12px 14px";
-        card.style.border = "1px solid rgba(255,255,255,.18)";
-        card.style.borderRadius = "14px";
-        card.style.background = "rgba(15,20,35,.86)";
-        card.style.boxShadow = "0 18px 50px rgba(0,0,0,.35)";
-        card.style.color = "#fff";
-        card.style.fontSize = "13px";
-        card.innerHTML = `
-          <div style="display:flex; gap:10px; align-items:flex-start;">
-            <div style="font-weight:800; letter-spacing:.2px;">Astra</div>
-            <button id="astraCoachClose" style="margin-left:auto;background:transparent;border:0;color:#fff;font-size:18px;line-height:1;cursor:pointer;">×</button>
-          </div>
-          <div style="opacity:.92; margin-top:6px; line-height:1.35;">${escapeHtml(msg || "")}</div>
-        `;
-
-        const img = document.createElement("img");
-        img.src = pose;
-        img.alt = "Astra";
-        img.onerror = () => (img.src = "/static/img/astra.png");
-        img.style.position = "fixed";
-        img.style.width = "280px";
-        img.style.height = "auto";
-        img.style.pointerEvents = "none";
-        img.style.filter = "drop-shadow(0 18px 45px rgba(0,0,0,.45))";
-
-        // posicionamiento alrededor del target
-        let cx = 24, cy = 24;
-        let ix = 24, iy = window.innerHeight - 320;
-
-        if (rect) {
-          const midY = rect.top + rect.height / 2;
-
-          if (align === "right") {
-            cx = Math.min(window.innerWidth - 360, rect.right + 16);
-            cy = Math.max(24, Math.min(window.innerHeight - 160, midY - 60));
-            ix = Math.max(24, cx - 290);
-            iy = Math.min(window.innerHeight - 320, cy + 90);
-          } else {
-            cx = Math.max(24, rect.left - 340);
-            cy = Math.max(24, Math.min(window.innerHeight - 160, midY - 60));
-            ix = Math.min(window.innerWidth - 300, cx + 260);
-            iy = Math.min(window.innerHeight - 320, cy + 90);
-          }
-        }
-
-        card.style.left = `${cx}px`;
-        card.style.top = `${cy}px`;
-        img.style.left = `${ix}px`;
-        img.style.top = `${iy}px`;
-
-        overlay.appendChild(card);
-        overlay.appendChild(img);
-        document.body.appendChild(overlay);
-
-        const close = () => overlay.remove();
-        overlay.addEventListener("click", (e) => {
-          if (e.target === overlay) close();
-        });
-        card.querySelector("#astraCoachClose")?.addEventListener("click", close);
-      },
-    };
-  }
-
-  // ============================================================
   // DOM
   // ============================================================
   const field = qs("#subprogramasField");
@@ -310,7 +229,218 @@ document.addEventListener("DOMContentLoaded", async () => {
   const constellation = document.querySelector(".constellation");
 
   // ============================================================
-  // Logout
+  // ✅ Coach Astra (NO bloquea clicks + Astra grande fuera del cuadro)
+  // ============================================================
+  const COACH_KEY = "astra_onboarding_v1_done";
+  let coach = null;
+
+  function injectCoachStylesOnce() {
+    if (document.getElementById("astraCoachStyles")) return;
+    const st = document.createElement("style");
+    st.id = "astraCoachStyles";
+    st.textContent = `
+      .astra-coach {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        pointer-events: none; /* ✅ no bloquea clicks */
+      }
+      .astra-coach__img {
+        position: fixed;
+        width: 220px;
+        height: auto;
+        filter: drop-shadow(0 12px 28px rgba(0,0,0,.55));
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+      }
+      .astra-coach__bubble {
+        position: fixed;
+        max-width: 320px;
+        padding: 12px 12px;
+        border-radius: 12px;
+        background: rgba(10,14,28,.86);
+        border: 1px solid rgba(255,255,255,.12);
+        box-shadow: 0 18px 44px rgba(0,0,0,.45);
+        color: rgba(255,255,255,.92);
+        font-size: 13px;
+        line-height: 1.35;
+        pointer-events: auto; /* ✅ solo burbuja clickeable */
+        backdrop-filter: blur(10px);
+      }
+      .astra-coach__title {
+        font-weight: 800;
+        font-size: 12px;
+        opacity: .95;
+        margin-bottom: 4px;
+        display:flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: center;
+      }
+      .astra-coach__close {
+        width: 28px;
+        height: 28px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.14);
+        background: rgba(255,255,255,.06);
+        color: rgba(255,255,255,.85);
+        cursor: pointer;
+      }
+      .astra-coach__close:hover { background: rgba(255,255,255,.10); }
+      .astra-coach__arrow {
+        position: fixed;
+        width: 14px;
+        height: 14px;
+        transform: rotate(45deg);
+        background: rgba(10,14,28,.86);
+        border-left: 1px solid rgba(255,255,255,.12);
+        border-top: 1px solid rgba(255,255,255,.12);
+        pointer-events: none;
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function ensureCoach() {
+    if (coach) return coach;
+    injectCoachStylesOnce();
+
+    const root = document.createElement("div");
+    root.className = "astra-coach";
+    root.style.display = "none";
+
+    const img = document.createElement("img");
+    img.className = "astra-coach__img";
+    img.src = "/static/img/astra_point.png";
+    img.onerror = () => (img.src = "/static/img/astra.png");
+    img.alt = "Astra";
+
+    const bubble = document.createElement("div");
+    bubble.className = "astra-coach__bubble";
+
+    const arrow = document.createElement("div");
+    arrow.className = "astra-coach__arrow";
+
+    bubble.innerHTML = `
+      <div class="astra-coach__title">
+        <span>Astra</span>
+        <button class="astra-coach__close" title="Cerrar">×</button>
+      </div>
+      <div class="astra-coach__msg">…</div>
+    `;
+
+    bubble.querySelector(".astra-coach__close")?.addEventListener("click", () => hideCoach(true));
+
+    root.appendChild(img);
+    root.appendChild(arrow);
+    root.appendChild(bubble);
+    document.body.appendChild(root);
+
+    coach = { root, img, bubble, arrow, msg: bubble.querySelector(".astra-coach__msg") };
+    return coach;
+  }
+
+  function setCoachContent({ text, pose = "point" } = {}) {
+    const c = ensureCoach();
+    const mapPose = {
+      saludo: "/static/img/astra_saludo.png",
+      point: "/static/img/astra_point.png",
+      stats: "/static/img/astra_stats.png",
+      exit: "/static/img/astra_exit.png",
+    };
+    c.img.src = mapPose[pose] || mapPose.point;
+    c.msg.textContent = text || "";
+  }
+
+  function positionCoachToTarget(targetEl) {
+    const c = ensureCoach();
+    const r = targetEl.getBoundingClientRect();
+
+    // target punto de referencia (centro del target)
+    const tx = r.left + r.width * 0.65;
+    const ty = r.top + r.height * 0.40;
+
+    // Astra grande, un poco a la izquierda y abajo del target
+    const ax = Math.max(120, tx - 190);
+    const ay = Math.min(window.innerHeight - 140, ty + 80);
+
+    // burbuja a la derecha del target
+    const bx = Math.min(window.innerWidth - 360, tx + 120);
+    const by = Math.max(20, ty - 40);
+
+    // flecha entre burbuja y target
+    const arx = Math.min(window.innerWidth - 30, bx - 10);
+    const ary = Math.max(20, by + 18);
+
+    c.img.style.left = `${ax}px`;
+    c.img.style.top = `${ay}px`;
+
+    c.bubble.style.left = `${bx}px`;
+    c.bubble.style.top = `${by}px`;
+
+    c.arrow.style.left = `${arx}px`;
+    c.arrow.style.top = `${ary}px`;
+  }
+
+  let coachTimer = null;
+  function showCoach({ target, text, pose = "point", autoCloseMs = 0 } = {}) {
+    if (!target) return;
+    const c = ensureCoach();
+    clearTimeout(coachTimer);
+
+    setCoachContent({ text, pose });
+    positionCoachToTarget(target);
+
+    c.root.style.display = "block";
+
+    // Reposicionar en resize/scroll
+    const onMove = () => {
+      if (c.root.style.display !== "block") return;
+      positionCoachToTarget(target);
+    };
+    window.addEventListener("resize", onMove, { passive: true });
+    window.addEventListener("scroll", onMove, { passive: true });
+
+    c._cleanup = () => {
+      window.removeEventListener("resize", onMove);
+      window.removeEventListener("scroll", onMove);
+    };
+
+    if (autoCloseMs && autoCloseMs > 0) {
+      coachTimer = setTimeout(() => hideCoach(false), autoCloseMs);
+    }
+  }
+
+  function hideCoach(markDone = false) {
+    if (!coach) return;
+    clearTimeout(coachTimer);
+    coach.root.style.display = "none";
+    coach._cleanup?.();
+    coach._cleanup = null;
+    if (markDone) {
+      try { localStorage.setItem(COACH_KEY, "1"); } catch {}
+    }
+  }
+
+  function shouldAutoCoach() {
+    try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
+  }
+
+  // expone para botón "Guía" si lo quieres
+  A.openGuide = function () {
+    if (!isIES()) return;
+    const first = field?.querySelector(".subp-node");
+    if (!first) return;
+    showCoach({
+      target: first,
+      pose: "saludo",
+      text: "Elige un subprograma para ver sus submódulos. Luego abre un submódulo y registra evidencias.",
+      autoCloseMs: 0,
+    });
+  };
+
+  // ============================================================
+  // Logout (una sola vez)
   // ============================================================
   if (btnLogout && !btnLogout.dataset.wired) {
     btnLogout.dataset.wired = "1";
@@ -328,7 +458,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ============================================================
   // State
   // ============================================================
-  A.state = A.state || {};
   A.state.subprogramas = Array.isArray(A.state.subprogramas) ? A.state.subprogramas : [];
   A.state.submodulos = Array.isArray(A.state.submodulos) ? A.state.submodulos : [];
   A.state.activeSubp = A.state.activeSubp || null;
@@ -393,6 +522,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     el.style.display = hidden ? "none" : "";
   }
 
+  function cleanupBackdrops() {
+    document.querySelectorAll(".offcanvas-backdrop").forEach((b) => b.remove());
+    document.body.classList.remove("modal-open");
+    document.body.style.overflow = "";
+  }
+
   function forceCloseSubmodsDrawer() {
     try { canvas?.hide(); } catch {}
     if (canvasEl) {
@@ -400,9 +535,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       canvasEl.style.visibility = "hidden";
       canvasEl.setAttribute("aria-hidden", "true");
     }
-    document.querySelectorAll(".offcanvas-backdrop").forEach((b) => b.remove());
-    document.body.classList.remove("modal-open");
-    document.body.style.overflow = "";
+    cleanupBackdrops();
+  }
+
+  // ✅ si Bootstrap dispara hidden, limpiamos igual (evita “pantalla bloqueada”)
+  if (canvasEl && !canvasEl.dataset.cleanupBound) {
+    canvasEl.dataset.cleanupBound = "1";
+    canvasEl.addEventListener("hidden.bs.offcanvas", () => cleanupBackdrops());
   }
 
   function resetLockedAdminUI() {
@@ -427,10 +566,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // ============================================================
   // showOnly
-  // - Admin: nunca muestra operativa; solo resumen.
-  // - IES: home/operativa/resumen
   // ============================================================
   function showOnly(panel) {
+    hideCoach(false); // ✅ nunca dejes la guía “pegada” tapando
+
     if (isAdminLocked()) {
       resetLockedAdminUI();
       return;
@@ -447,18 +586,30 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
+    // IES
     const operativaIsVisible = panel === "operativa";
     const resumenIsVisible = panel === "resumen";
 
     setHidden(operativaPanel, !operativaIsVisible);
     setHidden(resumenPanel, !resumenIsVisible);
     if (constellation) setHidden(constellation, panel !== "home");
-  }
 
-  function goHomeIES() {
-    showOnly("home");
-    // esto evita el “me quedé sin subprogramas” después de volver
-    renderSubprogramas();
+    // ✅ al volver a home, re-render por si algo quedó raro
+    if (panel === "home") {
+      renderSubprogramas();
+      // Coach solo la 1era vez
+      if (shouldAutoCoach()) {
+        const first = field?.querySelector(".subp-node");
+        if (first) {
+          showCoach({
+            target: first,
+            pose: "saludo",
+            text: "Elige un subprograma para ver sus submódulos. Luego abre un submódulo y registra evidencias.",
+            autoCloseMs: 0,
+          });
+        }
+      }
+    }
   }
 
   // ============================================================
@@ -470,7 +621,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       A.toast({
         type: "warning",
         title: "Sesión",
-        msg: "Tu sesión expiró o no es válida. Inicia sesión otra vez.",
+        msg: "Tu sesión expiró o no es válida. Vuelve a iniciar sesión.",
         ms: 6500,
       });
       return;
@@ -479,8 +630,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       A.toast({
         type: "danger",
         title: "Permisos",
-        msg: (context ? `${context}. ` : "") + "No tienes permisos para esta acción con tu rol actual.",
-        ms: 8000,
+        msg:
+          (context ? `${context}. ` : "") +
+          "El backend rechazó la operación por permisos. Revisa el rol y la IES activa.",
+        ms: 8500,
       });
       return;
     }
@@ -504,7 +657,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         A.toast({
           type: "info",
           title: `Hola ${getDisplayName()} 👋`,
-          msg: "Selecciona una IES para ver su Resumen general.",
+          msg: "Primero selecciona una IES para ver su Resumen general.",
           ms: 5200,
         });
       }
@@ -514,20 +667,82 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
+  // ✅ IES context resolver (SIN /auth/me)
+  // - evita “me 404”
+  // - usa JWT / localStorage (lo que ya guardó core.js)
+  // ============================================================
+  function resolveIESContext(p) {
+    const iesId = p?.ies_id ?? p?.iesId ?? p?.iesID ?? null;
+
+    // prioridad: JWT ies_slug
+    const jwtSlug =
+      p?.ies_slug || p?.iesSlug || p?.institucion_slug || p?.org_slug || "";
+
+    // fallback: core.js puede haber guardado ies_slug
+    let storedSlug = "";
+    try {
+      storedSlug =
+        (typeof A.getIesSlug === "function" ? A.getIesSlug() : "") ||
+        localStorage.getItem("ies_slug") ||
+        "";
+    } catch {}
+
+    const slug = (jwtSlug || storedSlug || "").toString().trim();
+    if (slug) {
+      return {
+        id: iesId,
+        slug,
+        nombre: p?.ies_nombre || p?.iesNombre || slug,
+        _source: jwtSlug ? "jwt" : "storage",
+        _trusted: !!jwtSlug, // si vino de JWT, es confiable
+      };
+    }
+
+    // último fallback por email (NO confiable)
+    const email = p?.email || p?.usuario || "";
+    const fallbackSlug = email && String(email).includes("@") ? String(email).split("@")[0] : null;
+    if (fallbackSlug) {
+      return { id: iesId, slug: fallbackSlug, nombre: fallbackSlug, _source: "email-fallback", _trusted: false };
+    }
+
+    return { id: iesId, slug: null, nombre: null, _source: "none", _trusted: false };
+  }
+
+  // ============================================================
   // Loaders: IES context + IES list (admin)
-  // (IMPORTANTE) Para IES NO llamamos /auth/me ni /ies/ aquí.
-  //             No necesitamos ies_slug porque el endpoint IES es /operacion/submodulos/{id}/evidencias
   // ============================================================
   async function loadIESContext() {
     const p = A.parseJwt?.() || {};
     enforceRoleUI();
 
     if (isIES()) {
-      const iesId = p?.ies_id ?? p?.iesId ?? p?.iesID ?? null;
-      const nombre = p?.ies_nombre ?? p?.iesNombre ?? p?.nombre ?? p?.name ?? p?.email ?? "IES";
+      const ctx = resolveIESContext(p);
+      A.state.ies = ctx.slug ? ctx : { ...ctx, slug: null };
 
-      A.state.ies = { id: iesId, slug: null, nombre, _source: "jwt", _trusted: true };
-      setUserActive(`Institución activa: ${String(nombre).includes("@") ? String(nombre).split("@")[0] : nombre}`, true);
+      if (ctx.slug) {
+        setUserActive(`Institución activa: ${ctx.nombre || ctx.slug}`, true);
+
+        if (!ctx._trusted) {
+          A.toast({
+            type: "warning",
+            title: "Aviso",
+            msg:
+              "No encontré ies_slug en el token. Estoy usando un slug estimado. " +
+              "Si no coincide con la IES real, el backend puede bloquear acciones.",
+            ms: 9000,
+          });
+        }
+      } else {
+        setUserActive("Institución activa: (sin slug)", true);
+        A.toast({
+          type: "danger",
+          title: "Falta IES",
+          msg:
+            "No pude determinar la IES (slug). No se podrán cargar evidencias. " +
+            "Solución ideal: incluir ies_slug dentro del JWT.",
+          ms: 10000,
+        });
+      }
       return;
     }
 
@@ -561,10 +776,10 @@ document.addEventListener("DOMContentLoaded", async () => {
           A.toast({
             type: "success",
             title: "IES activa",
-            msg: `${found.nombre}. Abriendo el resumen general…`,
-            ms: 2800,
+            msg: `${found.nombre} (${found.slug}). Abriendo Resumen general…`,
+            ms: 3200,
           });
-          try { await openResumenGeneral(); } catch (e) { toastHttpError(e, "No se pudo abrir el resumen general"); }
+          try { await openResumenGeneral(); } catch (e) { toastHttpError(e, "No se pudo abrir Resumen general"); }
         } else {
           A.state.ies = null;
           setUserActive("", false);
@@ -623,7 +838,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         <div class="subp-top">
           <div>
             <h3 class="subp-title">${escapeHtml(sp.nombre)}</h3>
-            <p class="subp-desc">Abre un submódulo y gestiona evidencias.</p>
+            <p class="subp-desc">Entra para ver submódulos y registrar evidencias.</p>
           </div>
           <div class="subp-chip">#${idx + 1}</div>
         </div>
@@ -635,7 +850,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     return `
       <div class="subm-item" data-id="${sm.id}">
         <h4 class="subm-name">${escapeHtml(sm.nombre)}</h4>
-        <p class="subm-hint">Abrir operativa · ver resumen</p>
+        <p class="subm-hint">Abrir operativa · revisar resumen</p>
       </div>
     `;
   }
@@ -707,19 +922,22 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function openSubmodsDrawer() {
-    try { canvas?.show(); } catch {}
+    hideCoach(true); // ✅ al interactuar, marca onboarding como hecho
+    try {
+      if (canvasEl) {
+        canvasEl.style.visibility = "visible";
+        canvasEl.removeAttribute("aria-hidden");
+      }
+      canvas?.show();
+    } catch {}
   }
 
   // ============================================================
-  // Endpoint helpers (CLAVE: bifurcación IES vs Admin)
+  // Endpoint helpers
   // ============================================================
   function evidenciasUrlForSubmodulo(submoduloId) {
-    // IES -> endpoint sin slug (es el que te da 200)
-    if (isIES()) return `/operacion/submodulos/${submoduloId}/evidencias`;
-
-    // Admin -> endpoint con slug de la IES seleccionada
     const slug = A.state.ies?.slug;
-    if (!slug) throw new Error("Selecciona una IES (admin) para cargar evidencias.");
+    if (!slug) throw new Error("Falta ies.slug para cargar evidencias.");
     return `/operacion/ies/${slug}/submodulos/${submoduloId}/evidencias`;
   }
 
@@ -738,16 +956,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function saveEvidenciaPatch(evidenciaId, payload) {
-    if (isIES()) {
-      return await A.api(`/operacion/evidencias/${evidenciaId}`, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-      });
-    }
-    // Admin patch requiere slug
-    const slug = A.state.ies?.slug;
-    if (!slug) throw new Error("Selecciona una IES (admin) para guardar evidencias.");
-    return await A.api(`/operacion/ies/${slug}/evidencias/${evidenciaId}`, {
+    return await A.api(`/operacion/evidencias/${evidenciaId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
@@ -757,12 +966,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Operativa (solo IES)
   // ============================================================
   async function openOperativa(submodulo) {
+    hideCoach(true);
+
     if (!isIES()) {
+      A.toast({ type: "warning", title: "Modo Admin", msg: "El Admin no llena operativa. Usa Resumen general.", ms: 4200 });
+      return;
+    }
+    if (!A.state.ies?.slug) {
       A.toast({
-        type: "warning",
-        title: "Modo Admin",
-        msg: "El Admin no llena operativa. Usa el resumen general.",
-        ms: 4200,
+        type: "danger",
+        title: "Sin IES (slug)",
+        msg: "No se puede cargar operativa porque no se conoce el ies_slug. Revisa JWT.",
+        ms: 9000,
       });
       return;
     }
@@ -772,8 +987,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     forceCloseSubmodsDrawer();
 
     if (!operativaPanel) return;
-
-    const iesName = A.state.ies?.nombre || "—";
+    const iesName = A.state.ies?.nombre || A.state.ies?.slug || "—";
 
     operativaPanel.innerHTML = `
       <div class="container-fluid mt-3">
@@ -786,7 +1000,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             </div>
           </div>
           <div class="d-flex gap-2">
-            <button id="btnBackToMap" class="btn btn-outline-light btn-sm">Volver al mapa</button>
+            <button id="btnBackToMap" class="btn btn-outline-light btn-sm">Volver</button>
             <button id="btnOpenResumen" class="btn btn-primary btn-sm">Ver resumen</button>
           </div>
         </div>
@@ -819,7 +1033,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             </div>
 
             <div class="text-secondary small mt-2">
-              Ajusta los campos y guarda cada fila cuando esté lista.
+              Ajusta los campos y presiona <b>Guardar</b> en la fila que modificaste.
             </div>
           </div>
         </div>
@@ -832,7 +1046,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const tbody = document.getElementById("opTbody");
     const opStatus = document.getElementById("opStatus");
 
-    btnBackToMap?.addEventListener("click", () => goHomeIES());
+    btnBackToMap?.addEventListener("click", () => showOnly("home"));
     btnOpenResumen?.addEventListener("click", async () => { await openResumenFromPlanner(submodulo); });
 
     function optionBool(v) {
@@ -909,7 +1123,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (tbody) {
         tbody.innerHTML =
           (rows || []).map(rowHTML).join("") ||
-          `<tr><td colspan="8" class="text-secondary">No hay evidencias registradas.</td></tr>`;
+          `<tr><td colspan="8" class="text-secondary">No hay evidencias.</td></tr>`;
       }
 
       if (opStatus) opStatus.textContent = `Evidencias: ${(rows || []).length}`;
@@ -943,7 +1157,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             setTimeout(() => { btn.textContent = "Guardar"; btn.disabled = false; }, 900);
           } catch (e) {
             console.error(e);
-            toastHttpError(e, "No se pudo guardar la evidencia");
+            toastHttpError(e, "No se pudo guardar evidencia");
             btn.textContent = "Error";
             setTimeout(() => { btn.textContent = "Guardar"; btn.disabled = false; }, 1200);
           }
@@ -951,9 +1165,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     } catch (e) {
       console.error(e);
-      toastHttpError(e, "No se pudieron cargar las evidencias");
+      toastHttpError(e, "No se pudo cargar evidencias");
       if (opStatus) opStatus.textContent = "Error cargando evidencias.";
-      if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-danger small">No se pudieron cargar evidencias.</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-danger small">No se pudo cargar evidencias.</td></tr>`;
     }
   }
 
@@ -961,6 +1175,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Resumen (submódulo)
   // ============================================================
   async function openResumenFromPlanner(submodulo) {
+    hideCoach(true);
+
     if (isAdminLocked()) {
       showAdminGateIfNeeded();
       return;
@@ -1115,17 +1331,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         </div>
 
         <div class="text-secondary small mt-2">
-          Abre cualquier submódulo para ver el resumen completo.
+          Abre un submódulo con <b>Ver</b> para revisar su resumen completo.
         </div>
       </div>
     `;
   }
 
   async function openResumenGeneral() {
+    hideCoach(true);
+
     if (!resumenPanel) return;
 
     if (isAdminLocked()) {
-      A.toast({ type: "warning", title: "Falta IES", msg: "Selecciona una IES para abrir el resumen general.", ms: 4200 });
+      A.toast({ type: "warning", title: "Falta IES", msg: "Selecciona una IES para abrir el Resumen general.", ms: 4200 });
       showAdminGateIfNeeded();
       return;
     }
@@ -1138,17 +1356,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     setHidden(resumenPanel, false);
 
     resumenPanel.innerHTML = resumenGeneralShellHTML(iesNombre, iesId);
-
     document.getElementById("btnBackRG")?.addEventListener("click", () => {
-      if (isIES()) goHomeIES();
-      else {
-        showOnly("home");
-        if (field) {
-          field.innerHTML = `<div class="text-secondary small">
-            <b>Modo Admin:</b> selecciona una IES y usa <b>Resumen general</b>.
-          </div>`;
-        }
-      }
+      if (isIES()) showOnly("home");
+      else showOnly("home");
     });
 
     const rgProgress = document.getElementById("rgProgress");
@@ -1288,6 +1498,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const node = ev.target.closest(".subp-node");
     if (!node) return;
 
+    hideCoach(true);
+
     const id = Number(node.dataset.id);
     setActiveSubp(id);
 
@@ -1312,6 +1524,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const item = ev.target.closest(".subm-item");
     if (!item) return;
 
+    hideCoach(true);
+
     const id = Number(item.dataset.id);
     const sm = A.state.submodulos.find((x) => x.id === id) || null;
     A.state.activeSubm = sm;
@@ -1332,6 +1546,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (rgBusy) return;
     rgBusy = true;
 
+    hideCoach(true);
+
     const oldText = btnResumenGlobal?.textContent;
     if (btnResumenGlobal) {
       btnResumenGlobal.disabled = true;
@@ -1350,6 +1566,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   btnReset?.addEventListener("click", () => {
+    hideCoach(false);
+
     A.state.activeSubp = null;
     A.state.activeSubm = null;
 
@@ -1369,7 +1587,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       showAdminGateIfNeeded();
       showOnly("home");
     } else {
-      goHomeIES();
+      showOnly("home");
     }
   });
 
@@ -1403,29 +1621,25 @@ document.addEventListener("DOMContentLoaded", async () => {
     showOnly("home");
     renderSubprogramas();
 
-    // Onboarding (solo 1 vez)
-    const key = "astra_onboard_planner_v1";
-    try {
-      const seen = localStorage.getItem(key);
-      if (!seen) {
-        localStorage.setItem(key, "1");
-        setTimeout(() => {
-          A.coach.show({
-            target: ".subp-node",
-            pose: "/static/img/astra_saludo.png",
-            msg: "Elige un subprograma para ver sus submódulos. Luego abre uno y registra evidencias.",
-            align: "right",
-          });
-        }, 900);
+    // ✅ Coach auto (solo 1era vez)
+    if (shouldAutoCoach()) {
+      const first = field?.querySelector(".subp-node");
+      if (first) {
+        showCoach({
+          target: first,
+          pose: "saludo",
+          text: "Elige un subprograma para ver sus submódulos. Luego abre un submódulo y registra evidencias.",
+          autoCloseMs: 0,
+        });
       }
-    } catch {}
+    }
   } catch (err) {
     console.error(err);
     if (field) field.innerHTML = `<div class="text-danger small">Error cargando catálogo.</div>`;
     A.toast({
       type: "danger",
       title: "Error",
-      msg: "No se pudo cargar el catálogo. Revisa consola/endpoints.",
+      msg: "No se pudo cargar el catálogo. Revisa consola/endpoint.",
       ms: 6500,
     });
   }
