@@ -132,7 +132,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // ✅ IMPORTANTE: sincroniza sesión YA
+  //  IMPORTANTE: sincroniza sesión YA
   // ============================================================
   try {
     if (typeof A.refreshSession === "function") {
@@ -141,75 +141,40 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch (e) {
     console.warn("refreshSession falló:", e);
   }
+// ============================================================
+//  Toast COMPAT (planner.js -> core.js)
+// ============================================================
+function toastCompat({
+  title = "ASTRA",
+  msg = "",
+  message = "",
+  type = "info",
+  ms = 5200,
+  timeout = null,
+  sticky = false,
+  actions = [],
+} = {}) {
+  const map = { info: "info", success: "success", warning: "warn", danger: "error" };
 
-  // ============================================================
-  // Toasts (si core.js ya trae A.toast, no lo piso)
-  // ============================================================
-  function ensureToasts() {
-    const wrapId = "astraToasts";
-    let wrap = document.getElementById(wrapId);
-    if (!wrap) {
-      wrap = document.createElement("div");
-      wrap.id = wrapId;
-      wrap.className = "astra-toasts";
-      wrap.setAttribute("aria-live", "polite");
-      wrap.setAttribute("aria-atomic", "true");
-      document.body.appendChild(wrap);
-    }
-    return wrap;
-  }
+  const finalMessage = (message || msg || "").toString();
+  const finalTimeout = timeout ?? ms;
 
-  function toast({ title = "ASTRA", msg = "", type = "info", ms = 5200 } = {}) {
-    const wrap = ensureToasts();
-    const el = document.createElement("div");
-    el.className = "astra-toast";
-
-    const borderByType = {
-      info: "rgba(120,160,255,.40)",
-      success: "rgba(120,255,170,.35)",
-      warning: "rgba(255,220,120,.35)",
-      danger: "rgba(255,120,120,.40)",
-    };
-    el.style.borderColor = borderByType[type] || borderByType.info;
-
-    const imgSrc = "/static/img/astra_saludo.png";
-
-    el.innerHTML = `
-      <div class="astra-toast__row">
-        <div class="astra-toast__img">
-          <img src="${imgSrc}" onerror="this.src='/static/img/astra.png'" alt="Astra">
-        </div>
-        <div class="astra-toast__txt">
-          <div class="astra-toast__title">${escapeHtml(title)}</div>
-          <p class="astra-toast__msg">${escapeHtml(msg)}</p>
-        </div>
-        <div class="astra-toast__actions">
-          <button class="astra-toast__close" aria-label="Cerrar">×</button>
-        </div>
-      </div>
-    `;
-
-    const close = () => {
-      el.style.opacity = "0";
-      el.style.transform = "translateY(6px)";
-      setTimeout(() => el.remove(), 180);
-    };
-
-    el.querySelector(".astra-toast__close")?.addEventListener("click", close);
-
-    el.style.opacity = "0";
-    el.style.transform = "translateY(6px)";
-    wrap.appendChild(el);
-    requestAnimationFrame(() => {
-      el.style.transition = "all .18s ease";
-      el.style.opacity = "1";
-      el.style.transform = "translateY(0px)";
+  // usa el toast real del core si existe
+  if (typeof A.toast === "function") {
+    return A.toast({
+      type: map[type] || "info",
+      title,
+      message: finalMessage,
+      timeout: finalTimeout,
+      sticky,
+      actions,
     });
-
-    if (ms && ms > 0) setTimeout(close, ms);
   }
 
-  A.toast = A.toast || toast;
+  // fallback si por alguna razón no hay core.js
+  console.log(`[${type}] ${title}: ${finalMessage}`);
+}
+
 
   // ============================================================
   // DOM
@@ -241,7 +206,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const constellation = document.querySelector(".constellation");
 
   // ============================================================
-  // ✅ Coach Astra (igual que tu versión)
+  //  Coach Astra (igual que tu versión)
   // ============================================================
   const COACH_KEY = "astra_onboarding_v1_done";
   let coach = null;
@@ -571,7 +536,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   function toastHttpError(e, context = "") {
     const status = e?.status;
     if (status === 401) {
-      A.toast({
+      toastCompat({
         type: "warning",
         title: "Sesión",
         msg: "Tu sesión expiró o no es válida. Vuelve a iniciar sesión.",
@@ -580,7 +545,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
     if (status === 403) {
-      A.toast({
+      toastCompat({
         type: "danger",
         title: "Permisos",
         msg:
@@ -590,7 +555,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
       return;
     }
-    A.toast({
+    toastCompat({
       type: "danger",
       title: "Error",
       msg: (context ? `${context}. ` : "") + (e?.message || "Falló la operación."),
@@ -607,7 +572,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       resetLockedAdminUI();
       if (!adminGateShown) {
         adminGateShown = true;
-        A.toast({
+        toastCompat({
           type: "info",
           title: `Hola ${getDisplayName()} 👋`,
           msg: "Primero selecciona una IES para ver su Resumen general.",
@@ -620,7 +585,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // ✅ IES context resolver (NO ADIVINAR POR EMAIL)
+  //  IES context resolver (NO ADIVINAR POR EMAIL)
   // ============================================================
   function resolveIESContextFromCoreAndJwt() {
     const p = A.parseJwt?.() || {};
@@ -680,7 +645,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // ✅ NUEVO: resolver IES automáticamente por ies_id -> /ies/
+  //  NUEVO: resolver IES automáticamente por ies_id -> /ies/
   // ============================================================
   async function ensureIESResolved() {
     if (A.state?.ies?.slug) return A.state.ies;
@@ -728,10 +693,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       const ctx = resolveIESContextFromCoreAndJwt();
       A.state.ies = ctx.slug ? ctx : { ...ctx, slug: null };
 
-      // 👇 OJO: ya NO retornamos aquí para no matar el catálogo
+      //  OJO: ya NO retornamos aquí para no matar el catálogo
       if (!ctx.slug) {
         setUserActive("Institución activa: (sin slug)", true);
-        A.toast({
+        toastCompat({
           type: "warning",
           title: "Falta IES (slug)",
           msg:
@@ -773,7 +738,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         if (found) {
           setUserActive(`IES activa: ${found.nombre} (${found.slug})`, true);
-          A.toast({
+          toastCompat ({
             type: "success",
             title: "IES activa",
             msg: `${found.nombre} (${found.slug}). Abriendo Resumen general…`,
@@ -867,7 +832,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    // ✅ NO bloquear por falta de slug: el catálogo NO depende del slug
+    //  NO bloquear por falta de slug: el catálogo NO depende del slug
     await ensureIESResolved();
 
     const data = await A.api("/catalogo/subprogramas");
@@ -972,15 +937,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     hideCoach(true);
 
     if (!isIES()) {
-      A.toast({ type: "warning", title: "Modo Admin", msg: "El Admin no llena operativa. Usa Resumen general.", ms: 4200 });
+      toastCompat ({ type: "warning", title: "Modo Admin", msg: "El Admin no llena operativa. Usa Resumen general.", ms: 4200 });
       return;
     }
 
-    // ✅ NUEVO: intenta resolver slug por ies_id antes de bloquear
+    //  NUEVO: intenta resolver slug por ies_id antes de bloquear
     await ensureIESResolved();
 
     if (!A.state.ies?.slug) {
-      A.toast({
+      toastCompat({
         type: "danger",
         title: "Sin IES (slug)",
         msg:
@@ -999,8 +964,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     const iesName = A.state.ies?.nombre || A.state.ies?.slug || "—";
 
     operativaPanel.innerHTML = `...`;
-    // ⚠️ Mantén el resto de tu openOperativa EXACTAMENTE igual desde aquí hacia abajo.
-    // (No lo re-pego entero porque tu mensaje viene cortado al final.)
   }
   // ============================================================
   // Resumen (submódulo)
@@ -1173,7 +1136,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!resumenPanel) return;
 
     if (isAdminLocked()) {
-      A.toast({ type: "warning", title: "Falta IES", msg: "Selecciona una IES para abrir el Resumen general.", ms: 4200 });
+      toastCompat ({ type: "warning", title: "Falta IES", msg: "Selecciona una IES para abrir el Resumen general.", ms: 4200 });
       showAdminGateIfNeeded();
       return;
     }
@@ -1457,7 +1420,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch (err) {
     console.error(err);
     if (field) field.innerHTML = `<div class="text-danger small">Error cargando catálogo.</div>`;
-    A.toast({
+    toastCompat ({
       type: "danger",
       title: "Error",
       msg: "No se pudo cargar el catálogo. Revisa consola/endpoint.",
