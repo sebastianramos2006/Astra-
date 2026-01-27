@@ -88,35 +88,60 @@
   A.isIES = () => A.getRole() === "ies";
 
   // --------------------------
-  // ✅ Session context (IES)
+  // ✅ Session context (IES) — robust (NO /auth/me)
+  // - Evita 404 de /auth/me
+  // - Deriva ies_slug desde el JWT (si existe)
+  // - Mantiene compatibilidad con planner.js y módulos viejos vía localStorage
   // --------------------------
+  function pickIesSlugFromPayload(p) {
+    const slug =
+      p?.ies_slug ||
+      p?.iesSlug ||
+      p?.ies ||
+      p?.ies_code ||
+      p?.iesCode ||
+      p?.institucion_slug ||
+      p?.institution_slug ||
+      p?.org_slug ||
+      p?.orgSlug ||
+      "";
+
+    return (slug || "").toString().trim();
+  }
+
+  function pickIesIdFromPayload(p) {
+    const v = p?.ies_id ?? p?.iesId ?? p?.iesID ?? null;
+    const n = v === null || v === undefined ? null : Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function persistSessionContext({ rol = "", ies_slug = "", ies_id = null } = {}) {
+    try {
+      localStorage.setItem("rol", String(rol || ""));
+      localStorage.setItem("ies_slug", String(ies_slug || ""));
+      localStorage.setItem("ies_id", ies_id === null ? "" : String(ies_id));
+    } catch {}
+
+    A.state.rol = String(rol || "");
+    A.state.ies_slug = String(ies_slug || "");
+    A.state.ies_id = ies_id === null ? null : Number(ies_id);
+  }
+
   A.refreshSession = async function () {
     const token = A.auth.get();
     if (!token) return null;
 
-    try {
-      const res = await fetch("/auth/me", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+    const p = A.parseJwt(token) || null;
+    const rol = A.getRole(); // admin | ies
 
-      if (!res.ok) return null;
+    // Guardar rol siempre
+    const ies_slug = rol === "ies" ? pickIesSlugFromPayload(p || {}) : "";
+    const ies_id = rol === "ies" ? pickIesIdFromPayload(p || {}) : null;
 
-      const me = await res.json();
+    persistSessionContext({ rol, ies_slug, ies_id });
 
-      // Persist for all modules (planner/operativa/resumen)
-      try {
-        localStorage.setItem("ies_slug", me?.ies_slug || "");
-        localStorage.setItem("rol", me?.rol || "");
-      } catch {}
-
-      // In-memory
-      A.state.ies_slug = me?.ies_slug || "";
-      A.state.rol = me?.rol || "";
-
-      return me;
-    } catch {
-      return null;
-    }
+    // ✅ NO llamamos /auth/me (no existe en tu backend)
+    return { rol, ies_slug, ies_id, from: "jwt" };
   };
 
   A.getIesSlug = function () {
@@ -128,14 +153,27 @@
     }
   };
 
+  A.getIesId = function () {
+    if (A.state?.ies_id) return A.state.ies_id;
+    try {
+      const v = localStorage.getItem("ies_id") || "";
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    } catch {
+      return null;
+    }
+  };
+
   A.clearSessionContext = function () {
     try {
       localStorage.removeItem("ies_slug");
       localStorage.removeItem("rol");
+      localStorage.removeItem("ies_id");
     } catch {}
     try {
       delete A.state.ies_slug;
       delete A.state.rol;
+      delete A.state.ies_id;
     } catch {}
   };
 
@@ -217,7 +255,6 @@
       await navigator.clipboard.writeText(t);
       return true;
     } catch {
-      // fallback
       try {
         const ta = document.createElement("textarea");
         ta.value = t;
@@ -240,7 +277,7 @@
    *   type: "success" | "info" | "warn" | "error",
    *   title: string,
    *   message: string,
-   *   timeout: ms (default 5000), // si sticky=true no se cierra solo
+   *   timeout: ms (default 5200), // sticky=true no se cierra solo
    *   sticky: boolean,
    *   actions: [{ label, onClick }]
    * })
@@ -294,9 +331,7 @@
 
     host.appendChild(el);
 
-    if (!sticky) {
-      setTimeout(close, Math.max(1500, Number(timeout) || 5200));
-    }
+    if (!sticky) setTimeout(close, Math.max(1500, Number(timeout) || 5200));
     return { close };
   };
 
@@ -357,32 +392,36 @@
       A.toast({
         type: "info",
         title: "Modo Admin",
-        message: "Crea/selecciona una IES desde la barra superior. Cada IES tiene su propia información.",
+        message:
+          "Selecciona una IES desde la barra superior para ver su información. Cada institución es independiente.",
         timeout: 6500,
       });
     } else if (role === "ies") {
       A.toast({
         type: "info",
         title: "Modo IES",
-        message: "Aquí registras evidencias y ves tus resúmenes. Selecciona un subprograma y luego un submódulo.",
+        message:
+          "Aquí registras evidencias y revisas tu avance. Elige un subprograma y luego un submódulo.",
         timeout: 6500,
       });
     }
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
-    // si hay token, sincronizamos sesión (sin molestar en /login)
+    // Si hay token, sincronizamos sesión (sin molestar en /login)
     if (!location.pathname.includes("/login")) {
       const t = A.auth.get();
       if (t && String(t).split(".").length === 3) {
-        await A.refreshSession(); // ✅ asegura ies_slug actualizado
+        await A.refreshSession(); // ✅ ahora NO genera 404
         welcomeOnce();
       }
     }
   });
 
   // --------------------------
-  // API wrapper
+  // API wrapper (mejorado)
+  // - conserva tu interfaz
+  // - agrega status en el error
   // --------------------------
   A.api = async function (path, opts = {}) {
     const token = A.auth.get();
@@ -407,15 +446,19 @@
       }
     };
 
+    const body = await readBody();
+
     if (!res.ok) {
-      const detail = await readBody();
       const msg =
-        (typeof detail === "string" && detail) ||
-        (detail?.detail ? JSON.stringify(detail.detail) : "") ||
+        (typeof body === "string" && body) ||
+        (body?.detail ? (typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail)) : "") ||
         `HTTP ${res.status} ${res.statusText}`;
-      throw new Error(msg);
+      const err = new Error(msg);
+      err.status = res.status;
+      err.body = body;
+      throw err;
     }
 
-    return await readBody();
+    return body;
   };
 })();

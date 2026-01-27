@@ -195,6 +195,92 @@ document.addEventListener("DOMContentLoaded", async () => {
   A.toast = A.toast || toast;
 
   // ============================================================
+  // Coach simple (Astra grande + burbuja chica)
+  // ============================================================
+  if (!A.coach) {
+    A.coach = {
+      show({ target, msg, pose = "/static/img/astra_point.png", align = "right" } = {}) {
+        const old = document.getElementById("astraCoach");
+        if (old) old.remove();
+
+        const t = typeof target === "string" ? document.querySelector(target) : target;
+        const rect = t?.getBoundingClientRect?.() || null;
+
+        const overlay = document.createElement("div");
+        overlay.id = "astraCoach";
+        overlay.style.position = "fixed";
+        overlay.style.inset = "0";
+        overlay.style.zIndex = "9999";
+        overlay.style.background = "rgba(0,0,0,.28)";
+        overlay.style.backdropFilter = "blur(2px)";
+
+        const card = document.createElement("div");
+        card.style.position = "fixed";
+        card.style.maxWidth = "320px";
+        card.style.padding = "12px 14px";
+        card.style.border = "1px solid rgba(255,255,255,.18)";
+        card.style.borderRadius = "14px";
+        card.style.background = "rgba(15,20,35,.86)";
+        card.style.boxShadow = "0 18px 50px rgba(0,0,0,.35)";
+        card.style.color = "#fff";
+        card.style.fontSize = "13px";
+        card.innerHTML = `
+          <div style="display:flex; gap:10px; align-items:flex-start;">
+            <div style="font-weight:800; letter-spacing:.2px;">Astra</div>
+            <button id="astraCoachClose" style="margin-left:auto;background:transparent;border:0;color:#fff;font-size:18px;line-height:1;cursor:pointer;">×</button>
+          </div>
+          <div style="opacity:.92; margin-top:6px; line-height:1.35;">${escapeHtml(msg || "")}</div>
+        `;
+
+        const img = document.createElement("img");
+        img.src = pose;
+        img.alt = "Astra";
+        img.onerror = () => (img.src = "/static/img/astra.png");
+        img.style.position = "fixed";
+        img.style.width = "280px";
+        img.style.height = "auto";
+        img.style.pointerEvents = "none";
+        img.style.filter = "drop-shadow(0 18px 45px rgba(0,0,0,.45))";
+
+        // posicionamiento alrededor del target
+        let cx = 24, cy = 24;
+        let ix = 24, iy = window.innerHeight - 320;
+
+        if (rect) {
+          const midY = rect.top + rect.height / 2;
+
+          if (align === "right") {
+            cx = Math.min(window.innerWidth - 360, rect.right + 16);
+            cy = Math.max(24, Math.min(window.innerHeight - 160, midY - 60));
+            ix = Math.max(24, cx - 290);
+            iy = Math.min(window.innerHeight - 320, cy + 90);
+          } else {
+            cx = Math.max(24, rect.left - 340);
+            cy = Math.max(24, Math.min(window.innerHeight - 160, midY - 60));
+            ix = Math.min(window.innerWidth - 300, cx + 260);
+            iy = Math.min(window.innerHeight - 320, cy + 90);
+          }
+        }
+
+        card.style.left = `${cx}px`;
+        card.style.top = `${cy}px`;
+        img.style.left = `${ix}px`;
+        img.style.top = `${iy}px`;
+
+        overlay.appendChild(card);
+        overlay.appendChild(img);
+        document.body.appendChild(overlay);
+
+        const close = () => overlay.remove();
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) close();
+        });
+        card.querySelector("#astraCoachClose")?.addEventListener("click", close);
+      },
+    };
+  }
+
+  // ============================================================
   // DOM
   // ============================================================
   const field = qs("#subprogramasField");
@@ -224,7 +310,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const constellation = document.querySelector(".constellation");
 
   // ============================================================
-  // Logout (una sola vez)
+  // Logout
   // ============================================================
   if (btnLogout && !btnLogout.dataset.wired) {
     btnLogout.dataset.wired = "1";
@@ -232,12 +318,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       ev.preventDefault();
       if (typeof A.logout === "function") A.logout();
       else {
-        try {
-          localStorage.removeItem("access_token");
-        } catch {}
-        try {
-          sessionStorage.removeItem("access_token");
-        } catch {}
+        try { localStorage.removeItem("access_token"); } catch {}
+        try { sessionStorage.removeItem("access_token"); } catch {}
         window.location.replace("/login");
       }
     });
@@ -252,15 +334,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   A.state.activeSubp = A.state.activeSubp || null;
   A.state.activeSubm = A.state.activeSubm || null;
 
-  A.state.ies = A.state.ies || null; // {id, slug, nombre, _source, _trusted}
+  A.state.ies = A.state.ies || null;      // {id, slug, nombre, _source, _trusted}
   A.state.iesList = Array.isArray(A.state.iesList) ? A.state.iesList : [];
 
   // ============================================================
   // Role helpers
   // ============================================================
   function role() {
-    const r0 =
-      (typeof A.getRole === "function" ? A.getRole() : A.getRoleRaw?.() || "") || "";
+    const r0 = (typeof A.getRole === "function" ? A.getRole() : A.getRoleRaw?.() || "") || "";
     const r = String(r0).toLowerCase().trim();
     if (r === "admin") return "admin";
     if (r === "cliente" || r === "ies") return "ies";
@@ -313,9 +394,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function forceCloseSubmodsDrawer() {
-    try {
-      canvas?.hide();
-    } catch {}
+    try { canvas?.hide(); } catch {}
     if (canvasEl) {
       canvasEl.classList.remove("show");
       canvasEl.style.visibility = "hidden";
@@ -348,7 +427,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // ============================================================
   // showOnly
-  // - Admin: nunca muestra módulos/operativa; solo resumen.
+  // - Admin: nunca muestra operativa; solo resumen.
   // - IES: home/operativa/resumen
   // ============================================================
   function showOnly(panel) {
@@ -376,6 +455,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (constellation) setHidden(constellation, panel !== "home");
   }
 
+  function goHomeIES() {
+    showOnly("home");
+    // esto evita el “me quedé sin subprogramas” después de volver
+    renderSubprogramas();
+  }
+
   // ============================================================
   // Error helper (401/403)
   // ============================================================
@@ -385,21 +470,17 @@ document.addEventListener("DOMContentLoaded", async () => {
       A.toast({
         type: "warning",
         title: "Sesión",
-        msg: "Tu sesión expiró o no es válida. Vuelve a iniciar sesión.",
+        msg: "Tu sesión expiró o no es válida. Inicia sesión otra vez.",
         ms: 6500,
       });
       return;
     }
     if (status === 403) {
-      const src = A.state?.ies?._trusted ? "IES confirmada" : "IES NO confirmada (slug derivado)";
       A.toast({
         type: "danger",
-        title: "Permisos (403)",
-        msg:
-          (context ? `${context}. ` : "") +
-          `El backend rechazó el acceso. ${src}. ` +
-          `Esto pasa cuando el token no corresponde a la IES/slug usados en la ruta.`,
-        ms: 8500,
+        title: "Permisos",
+        msg: (context ? `${context}. ` : "") + "No tienes permisos para esta acción con tu rol actual.",
+        ms: 8000,
       });
       return;
     }
@@ -423,7 +504,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         A.toast({
           type: "info",
           title: `Hola ${getDisplayName()} 👋`,
-          msg: "Primero selecciona una IES para ver su Resumen general.",
+          msg: "Selecciona una IES para ver su Resumen general.",
           ms: 5200,
         });
       }
@@ -433,97 +514,24 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // IES context resolver (robusto)
-  // prioridad: JWT claims -> /auth/me (si existe) -> /ies/ (si permitido) -> fallback email (NO confiable)
-  // ============================================================
-  async function resolveIESContextFromBackend(p) {
-    const iesId = p?.ies_id ?? p?.iesId ?? p?.iesID ?? null;
-    let slug = p?.ies_slug ?? p?.iesSlug ?? null;
-    let nombre = p?.ies_nombre ?? p?.iesNombre ?? null;
-
-    if (slug || nombre || iesId) {
-      if (slug) {
-        return { id: iesId, slug, nombre: nombre || slug, _source: "jwt", _trusted: true };
-      }
-    }
-
-    try {
-      const me = await A.api("/auth/me");
-      const mid = me?.ies_id ?? me?.iesId ?? me?.iesID ?? iesId ?? null;
-      const mslug = me?.ies_slug ?? me?.iesSlug ?? null;
-      const mnom = me?.ies_nombre ?? me?.iesNombre ?? null;
-
-      if (mslug) return { id: mid, slug: mslug, nombre: mnom || mslug, _source: "/auth/me", _trusted: true };
-    } catch (e) {
-      if (e?.status && e.status !== 404) console.warn("/auth/me error:", e);
-    }
-
-    if (iesId) {
-      try {
-        const list = await A.api("/ies/");
-        const found = Array.isArray(list) ? list.find((x) => Number(x.id) === Number(iesId)) : null;
-        if (found?.slug) {
-          return {
-            id: found.id ?? iesId,
-            slug: found.slug,
-            nombre: found.nombre || found.slug,
-            _source: "/ies/",
-            _trusted: true,
-          };
-        }
-      } catch (e) {
-        console.warn("No se pudo resolver slug vía /ies/:", e);
-      }
-    }
-
-    const email = p?.email || p?.usuario || "";
-    const fallbackSlug = email && String(email).includes("@") ? String(email).split("@")[0] : null;
-    if (fallbackSlug) {
-      return { id: iesId, slug: fallbackSlug, nombre: nombre || fallbackSlug, _source: "email-fallback", _trusted: false };
-    }
-
-    return { id: iesId, slug: null, nombre: nombre || null, _source: "none", _trusted: false };
-  }
-
-  // ============================================================
   // Loaders: IES context + IES list (admin)
+  // (IMPORTANTE) Para IES NO llamamos /auth/me ni /ies/ aquí.
+  //             No necesitamos ies_slug porque el endpoint IES es /operacion/submodulos/{id}/evidencias
   // ============================================================
   async function loadIESContext() {
-    const p = A.parseJwt?.();
+    const p = A.parseJwt?.() || {};
     enforceRoleUI();
 
     if (isIES()) {
-      const ctx = await resolveIESContextFromBackend(p || {});
-      A.state.ies = ctx.slug ? ctx : { ...ctx, slug: null };
+      const iesId = p?.ies_id ?? p?.iesId ?? p?.iesID ?? null;
+      const nombre = p?.ies_nombre ?? p?.iesNombre ?? p?.nombre ?? p?.name ?? p?.email ?? "IES";
 
-      if (ctx.slug) {
-        setUserActive(`Institución activa: ${ctx.nombre || ctx.slug}`, true);
-
-        if (!ctx._trusted) {
-          A.toast({
-            type: "warning",
-            title: "Token incompleto",
-            msg:
-              "No encontré ies_slug en el token ni pude obtenerlo del backend. " +
-              "Usaré un slug derivado del correo; si no coincide con la IES real, el backend devolverá 403.",
-            ms: 9000,
-          });
-        }
-      } else {
-        setUserActive("Institución activa: (sin slug)", true);
-        A.toast({
-          type: "danger",
-          title: "Falta ies_slug",
-          msg:
-            "No se pudo determinar la IES (slug). No se podrán cargar evidencias. " +
-            "Solución: agregar ies_slug al JWT o crear /auth/me (o /ies/me).",
-          ms: 10000,
-        });
-      }
+      A.state.ies = { id: iesId, slug: null, nombre, _source: "jwt", _trusted: true };
+      setUserActive(`Institución activa: ${String(nombre).includes("@") ? String(nombre).split("@")[0] : nombre}`, true);
       return;
     }
 
-    // Admin
+    // Admin: carga lista IES
     setUserActive("", false);
 
     let list = A.state.iesList;
@@ -553,14 +561,10 @@ document.addEventListener("DOMContentLoaded", async () => {
           A.toast({
             type: "success",
             title: "IES activa",
-            msg: `${found.nombre} (${found.slug}). Abriendo Resumen general…`,
-            ms: 3200,
+            msg: `${found.nombre}. Abriendo el resumen general…`,
+            ms: 2800,
           });
-          try {
-            await openResumenGeneral();
-          } catch (e) {
-            toastHttpError(e, "No se pudo abrir Resumen general");
-          }
+          try { await openResumenGeneral(); } catch (e) { toastHttpError(e, "No se pudo abrir el resumen general"); }
         } else {
           A.state.ies = null;
           setUserActive("", false);
@@ -619,7 +623,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         <div class="subp-top">
           <div>
             <h3 class="subp-title">${escapeHtml(sp.nombre)}</h3>
-            <p class="subp-desc">Explorar submódulos y gestionar evidencias.</p>
+            <p class="subp-desc">Abre un submódulo y gestiona evidencias.</p>
           </div>
           <div class="subp-chip">#${idx + 1}</div>
         </div>
@@ -631,7 +635,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     return `
       <div class="subm-item" data-id="${sm.id}">
         <h4 class="subm-name">${escapeHtml(sm.nombre)}</h4>
-        <p class="subm-hint">Abrir operativa (inputs) · o ver resumen</p>
+        <p class="subm-hint">Abrir operativa · ver resumen</p>
       </div>
     `;
   }
@@ -703,25 +707,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function openSubmodsDrawer() {
-    try {
-      canvas?.show();
-    } catch {}
+    try { canvas?.show(); } catch {}
   }
 
   // ============================================================
-  // Endpoint helpers  ✅✅ FIX PRINCIPAL AQUÍ
-  // - IES debe usar /operacion/submodulos/{id}/evidencias
-  // - Admin usa /operacion/ies/{slug}/submodulos/{id}/evidencias
+  // Endpoint helpers (CLAVE: bifurcación IES vs Admin)
   // ============================================================
   function evidenciasUrlForSubmodulo(submoduloId) {
-    // IES: endpoint propio (NO requiere rol admin)
-    if (isIES()) {
-      return `/operacion/submodulos/${submoduloId}/evidencias`;
-    }
+    // IES -> endpoint sin slug (es el que te da 200)
+    if (isIES()) return `/operacion/submodulos/${submoduloId}/evidencias`;
 
-    // Admin: endpoint por IES seleccionada
+    // Admin -> endpoint con slug de la IES seleccionada
     const slug = A.state.ies?.slug;
-    if (!slug) throw new Error("Falta ies.slug para cargar evidencias (Admin).");
+    if (!slug) throw new Error("Selecciona una IES (admin) para cargar evidencias.");
     return `/operacion/ies/${slug}/submodulos/${submoduloId}/evidencias`;
   }
 
@@ -740,10 +738,16 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function saveEvidenciaPatch(evidenciaId, payload) {
-    // Swagger: IES PATCH /operacion/evidencias/{evidencia_id}
-    // Admin PATCH /operacion/ies/{ies_slug}/evidencias/{evidencia_id}
-    // Aquí dejamos el IES patch (tu operativa es solo IES)
-    return await A.api(`/operacion/evidencias/${evidenciaId}`, {
+    if (isIES()) {
+      return await A.api(`/operacion/evidencias/${evidenciaId}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      });
+    }
+    // Admin patch requiere slug
+    const slug = A.state.ies?.slug;
+    if (!slug) throw new Error("Selecciona una IES (admin) para guardar evidencias.");
+    return await A.api(`/operacion/ies/${slug}/evidencias/${evidenciaId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
@@ -757,19 +761,19 @@ document.addEventListener("DOMContentLoaded", async () => {
       A.toast({
         type: "warning",
         title: "Modo Admin",
-        msg: "El Admin no llena operativa. Usa Resumen general.",
+        msg: "El Admin no llena operativa. Usa el resumen general.",
         ms: 4200,
       });
       return;
     }
 
-    // OJO: con el fix de endpoint, ya NO dependemos de ies_slug para cargar evidencias
     A.state.activeSubm = submodulo;
     showOnly("operativa");
     forceCloseSubmodsDrawer();
 
     if (!operativaPanel) return;
-    const iesName = A.state.ies?.nombre || A.state.ies?.slug || "—";
+
+    const iesName = A.state.ies?.nombre || "—";
 
     operativaPanel.innerHTML = `
       <div class="container-fluid mt-3">
@@ -782,7 +786,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             </div>
           </div>
           <div class="d-flex gap-2">
-            <button id="btnBackToMap" class="btn btn-outline-light btn-sm">Volver</button>
+            <button id="btnBackToMap" class="btn btn-outline-light btn-sm">Volver al mapa</button>
             <button id="btnOpenResumen" class="btn btn-primary btn-sm">Ver resumen</button>
           </div>
         </div>
@@ -815,7 +819,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             </div>
 
             <div class="text-secondary small mt-2">
-              Cambia valores y presiona <b>Guardar</b> por fila.
+              Ajusta los campos y guarda cada fila cuando esté lista.
             </div>
           </div>
         </div>
@@ -828,10 +832,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     const tbody = document.getElementById("opTbody");
     const opStatus = document.getElementById("opStatus");
 
-    btnBackToMap?.addEventListener("click", () => showOnly("home"));
-    btnOpenResumen?.addEventListener("click", async () => {
-      await openResumenFromPlanner(submodulo);
-    });
+    btnBackToMap?.addEventListener("click", () => goHomeIES());
+    btnOpenResumen?.addEventListener("click", async () => { await openResumenFromPlanner(submodulo); });
 
     function optionBool(v) {
       if (v === null || v === undefined) {
@@ -849,9 +851,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         { val: 70, label: "CUASI SATISFAC." },
         { val: 100, label: "SATISFACTORIO" },
       ];
-      return levels
-        .map((x) => `<option value="${x.val}" ${Number(v) === x.val ? "selected" : ""}>${x.label}</option>`)
-        .join("");
+      return levels.map((x) => `<option value="${x.val}" ${Number(v) === x.val ? "selected" : ""}>${x.label}</option>`).join("");
     }
 
     function rowHTML(r) {
@@ -909,7 +909,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (tbody) {
         tbody.innerHTML =
           (rows || []).map(rowHTML).join("") ||
-          `<tr><td colspan="8" class="text-secondary">No hay evidencias.</td></tr>`;
+          `<tr><td colspan="8" class="text-secondary">No hay evidencias registradas.</td></tr>`;
       }
 
       if (opStatus) opStatus.textContent = `Evidencias: ${(rows || []).length}`;
@@ -934,36 +934,26 @@ document.addEventListener("DOMContentLoaded", async () => {
             responsable: tr.querySelector(".op-responsable")?.value || "",
             fecha_inicio: tr.querySelector(".op-inicio")?.value || null,
             fecha_fin: tr.querySelector(".op-fin")?.value || null,
-            avance_pct: Math.max(
-              0,
-              Math.min(100, Number(tr.querySelector(".op-avance")?.value || 0))
-            ),
+            avance_pct: Math.max(0, Math.min(100, Number(tr.querySelector(".op-avance")?.value || 0))),
           };
 
           try {
             await saveEvidenciaPatch(eid, payload);
             btn.textContent = "Listo ✓";
-            setTimeout(() => {
-              btn.textContent = "Guardar";
-              btn.disabled = false;
-            }, 900);
+            setTimeout(() => { btn.textContent = "Guardar"; btn.disabled = false; }, 900);
           } catch (e) {
             console.error(e);
-            toastHttpError(e, "No se pudo guardar evidencia");
+            toastHttpError(e, "No se pudo guardar la evidencia");
             btn.textContent = "Error";
-            setTimeout(() => {
-              btn.textContent = "Guardar";
-              btn.disabled = false;
-            }, 1200);
+            setTimeout(() => { btn.textContent = "Guardar"; btn.disabled = false; }, 1200);
           }
         });
       }
     } catch (e) {
       console.error(e);
-      toastHttpError(e, "No se pudo cargar evidencias");
+      toastHttpError(e, "No se pudieron cargar las evidencias");
       if (opStatus) opStatus.textContent = "Error cargando evidencias.";
-      if (tbody)
-        tbody.innerHTML = `<tr><td colspan="8" class="text-danger small">No se pudo cargar evidencias.</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-danger small">No se pudieron cargar evidencias.</td></tr>`;
     }
   }
 
@@ -1125,7 +1115,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         </div>
 
         <div class="text-secondary small mt-2">
-          Tip: presiona <b>Ver</b> para abrir el resumen completo del submódulo.
+          Abre cualquier submódulo para ver el resumen completo.
         </div>
       </div>
     `;
@@ -1135,12 +1125,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!resumenPanel) return;
 
     if (isAdminLocked()) {
-      A.toast({
-        type: "warning",
-        title: "Falta IES",
-        msg: "Selecciona una IES para abrir el Resumen general.",
-        ms: 4200,
-      });
+      A.toast({ type: "warning", title: "Falta IES", msg: "Selecciona una IES para abrir el resumen general.", ms: 4200 });
       showAdminGateIfNeeded();
       return;
     }
@@ -1153,8 +1138,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     setHidden(resumenPanel, false);
 
     resumenPanel.innerHTML = resumenGeneralShellHTML(iesNombre, iesId);
+
     document.getElementById("btnBackRG")?.addEventListener("click", () => {
-      showOnly("home");
+      if (isIES()) goHomeIES();
+      else {
+        showOnly("home");
+        if (field) {
+          field.innerHTML = `<div class="text-secondary small">
+            <b>Modo Admin:</b> selecciona una IES y usa <b>Resumen general</b>.
+          </div>`;
+        }
+      }
     });
 
     const rgProgress = document.getElementById("rgProgress");
@@ -1297,8 +1291,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const id = Number(node.dataset.id);
     setActiveSubp(id);
 
-    if (submodulosList)
-      submodulosList.innerHTML = `<div class="text-secondary small">Cargando submódulos…</div>`;
+    if (submodulosList) submodulosList.innerHTML = `<div class="text-secondary small">Cargando submódulos…</div>`;
     openSubmodsDrawer();
 
     try {
@@ -1306,17 +1299,12 @@ document.addEventListener("DOMContentLoaded", async () => {
     } catch (e) {
       console.error(e);
       toastHttpError(e, "No se pudieron cargar submódulos");
-      if (submodulosList)
-        submodulosList.innerHTML = `<div class="text-danger small">Error cargando submódulos.</div>`;
+      if (submodulosList) submodulosList.innerHTML = `<div class="text-danger small">Error cargando submódulos.</div>`;
     }
   });
 
-  searchSubp?.addEventListener("input", () => {
-    if (isIES()) renderSubprogramas();
-  });
-  searchSubm?.addEventListener("input", () => {
-    if (isIES()) renderSubmodulos();
-  });
+  searchSubp?.addEventListener("input", () => { if (isIES()) renderSubprogramas(); });
+  searchSubm?.addEventListener("input", () => { if (isIES()) renderSubmodulos(); });
 
   submodulosList?.addEventListener("click", async (ev) => {
     if (!isIES()) return;
@@ -1381,7 +1369,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       showAdminGateIfNeeded();
       showOnly("home");
     } else {
-      showOnly("home");
+      goHomeIES();
     }
   });
 
@@ -1411,15 +1399,33 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
+    // IES normal
     showOnly("home");
     renderSubprogramas();
+
+    // Onboarding (solo 1 vez)
+    const key = "astra_onboard_planner_v1";
+    try {
+      const seen = localStorage.getItem(key);
+      if (!seen) {
+        localStorage.setItem(key, "1");
+        setTimeout(() => {
+          A.coach.show({
+            target: ".subp-node",
+            pose: "/static/img/astra_saludo.png",
+            msg: "Elige un subprograma para ver sus submódulos. Luego abre uno y registra evidencias.",
+            align: "right",
+          });
+        }, 900);
+      }
+    } catch {}
   } catch (err) {
     console.error(err);
     if (field) field.innerHTML = `<div class="text-danger small">Error cargando catálogo.</div>`;
     A.toast({
       type: "danger",
       title: "Error",
-      msg: "No se pudo cargar el catálogo. Revisa consola/endpoint.",
+      msg: "No se pudo cargar el catálogo. Revisa consola/endpoints.",
       ms: 6500,
     });
   }
