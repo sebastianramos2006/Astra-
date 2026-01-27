@@ -1,7 +1,7 @@
 // /static/js/planner.js
 document.addEventListener("DOMContentLoaded", async () => {
   // ============================================================
-  // ASTRA namespace (single source of truth)
+  // ASTRA namespace
   // ============================================================
   const A = (window.ASTRA = window.ASTRA || {});
   A.state = A.state || {};
@@ -97,6 +97,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     };
   }
 
+  // NO pisar A.api si ya existe (core.js)
   if (typeof A.api !== "function") {
     A.api = async function (path, opts = {}) {
       const url = path.startsWith("http") ? path : `${path}`;
@@ -128,6 +129,20 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
       return body;
     };
+  }
+
+  // ============================================================
+  // ✅ IMPORTANTE: sincroniza sesión YA
+  // - Esto hace que core.js guarde ies_slug / ies_id si existen en JWT
+  // - Evita que planner “adivine” slug por email
+  // ============================================================
+  try {
+    if (typeof A.refreshSession === "function") {
+      await A.refreshSession();
+    }
+  } catch (e) {
+    // no bloquea
+    console.warn("refreshSession falló:", e);
   }
 
   // ============================================================
@@ -229,6 +244,239 @@ document.addEventListener("DOMContentLoaded", async () => {
   const constellation = document.querySelector(".constellation");
 
   // ============================================================
+  // ✅ Coach Astra (igual que tu versión)
+  // ============================================================
+  const COACH_KEY = "astra_onboarding_v1_done";
+  let coach = null;
+
+  function injectCoachStylesOnce() {
+    if (document.getElementById("astraCoachStyles")) return;
+    const st = document.createElement("style");
+    st.id = "astraCoachStyles";
+    st.textContent = `
+      .astra-coach {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        pointer-events: none;
+      }
+      .astra-coach__img {
+        position: fixed;
+        width: 220px;
+        height: auto;
+        filter: drop-shadow(0 12px 28px rgba(0,0,0,.55));
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+      }
+      .astra-coach__bubble {
+        position: fixed;
+        max-width: 320px;
+        padding: 12px 12px;
+        border-radius: 12px;
+        background: rgba(10,14,28,.86);
+        border: 1px solid rgba(255,255,255,.12);
+        box-shadow: 0 18px 44px rgba(0,0,0,.45);
+        color: rgba(255,255,255,.92);
+        font-size: 13px;
+        line-height: 1.35;
+        pointer-events: auto;
+        backdrop-filter: blur(10px);
+      }
+      .astra-coach__title {
+        font-weight: 800;
+        font-size: 12px;
+        opacity: .95;
+        margin-bottom: 4px;
+        display:flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: center;
+      }
+      .astra-coach__close {
+        width: 28px;
+        height: 28px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.14);
+        background: rgba(255,255,255,.06);
+        color: rgba(255,255,255,.85);
+        cursor: pointer;
+      }
+      .astra-coach__close:hover { background: rgba(255,255,255,.10); }
+      .astra-coach__arrow {
+        position: fixed;
+        width: 14px;
+        height: 14px;
+        transform: rotate(45deg);
+        background: rgba(10,14,28,.86);
+        border-left: 1px solid rgba(255,255,255,.12);
+        border-top: 1px solid rgba(255,255,255,.12);
+        pointer-events: none;
+      }
+    `;
+    document.head.appendChild(st);
+  }
+
+  function ensureCoach() {
+    if (coach) return coach;
+    injectCoachStylesOnce();
+
+    const root = document.createElement("div");
+    root.className = "astra-coach";
+    root.style.display = "none";
+
+    const img = document.createElement("img");
+    img.className = "astra-coach__img";
+    img.src = "/static/img/astra_point.png";
+    img.onerror = () => (img.src = "/static/img/astra.png");
+    img.alt = "Astra";
+
+    const bubble = document.createElement("div");
+    bubble.className = "astra-coach__bubble";
+
+    const arrow = document.createElement("div");
+    arrow.className = "astra-coach__arrow";
+
+    bubble.innerHTML = `
+      <div class="astra-coach__title">
+        <span>Astra</span>
+        <button class="astra-coach__close" title="Cerrar">×</button>
+      </div>
+      <div class="astra-coach__msg">…</div>
+    `;
+
+    bubble.querySelector(".astra-coach__close")?.addEventListener("click", () => hideCoach(true));
+
+    root.appendChild(img);
+    root.appendChild(arrow);
+    root.appendChild(bubble);
+    document.body.appendChild(root);
+
+    coach = { root, img, bubble, arrow, msg: bubble.querySelector(".astra-coach__msg") };
+    return coach;
+  }
+
+  function setCoachContent({ text, pose = "point" } = {}) {
+    const c = ensureCoach();
+    const mapPose = {
+      saludo: "/static/img/astra_saludo.png",
+      point: "/static/img/astra_point.png",
+      stats: "/static/img/astra_stats.png",
+      exit: "/static/img/astra_exit.png",
+    };
+    c.img.src = mapPose[pose] || mapPose.point;
+    c.msg.textContent = text || "";
+  }
+
+  function positionCoachToTarget(targetEl) {
+    const c = ensureCoach();
+    const r = targetEl.getBoundingClientRect();
+
+    const tx = r.left + r.width * 0.65;
+    const ty = r.top + r.height * 0.40;
+
+    const ax = Math.max(120, tx - 190);
+    const ay = Math.min(window.innerHeight - 140, ty + 80);
+
+    const bx = Math.min(window.innerWidth - 360, tx + 120);
+    const by = Math.max(20, ty - 40);
+
+    const arx = Math.min(window.innerWidth - 30, bx - 10);
+    const ary = Math.max(20, by + 18);
+
+    c.img.style.left = `${ax}px`;
+    c.img.style.top = `${ay}px`;
+
+    c.bubble.style.left = `${bx}px`;
+    c.bubble.style.top = `${by}px`;
+
+    c.arrow.style.left = `${arx}px`;
+    c.arrow.style.top = `${ary}px`;
+  }
+
+  let coachTimer = null;
+  function showCoach({ target, text, pose = "point", autoCloseMs = 0 } = {}) {
+    if (!target) return;
+    const c = ensureCoach();
+    clearTimeout(coachTimer);
+
+    setCoachContent({ text, pose });
+    positionCoachToTarget(target);
+
+    c.root.style.display = "block";
+
+    const onMove = () => {
+      if (c.root.style.display !== "block") return;
+      positionCoachToTarget(target);
+    };
+    window.addEventListener("resize", onMove, { passive: true });
+    window.addEventListener("scroll", onMove, { passive: true });
+
+    c._cleanup = () => {
+      window.removeEventListener("resize", onMove);
+      window.removeEventListener("scroll", onMove);
+    };
+
+    if (autoCloseMs && autoCloseMs > 0) {
+      coachTimer = setTimeout(() => hideCoach(false), autoCloseMs);
+    }
+  }
+
+  function hideCoach(markDone = false) {
+    if (!coach) return;
+    clearTimeout(coachTimer);
+    coach.root.style.display = "none";
+    coach._cleanup?.();
+    coach._cleanup = null;
+    if (markDone) {
+      try { localStorage.setItem(COACH_KEY, "1"); } catch {}
+    }
+  }
+
+  function shouldAutoCoach() {
+    try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
+  }
+
+  // expone para botón "Guía"
+  A.openGuide = function () {
+    if (!isIES()) return;
+    const first = field?.querySelector(".subp-node");
+    if (!first) return;
+    showCoach({
+      target: first,
+      pose: "saludo",
+      text: "Elige un subprograma para ver sus submódulos. Luego abre un submódulo y registra evidencias.",
+      autoCloseMs: 0,
+    });
+  };
+
+  // ============================================================
+  // Logout
+  // ============================================================
+  if (btnLogout && !btnLogout.dataset.wired) {
+    btnLogout.dataset.wired = "1";
+    btnLogout.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      if (typeof A.logout === "function") A.logout();
+      else {
+        try { localStorage.removeItem("access_token"); } catch {}
+        try { sessionStorage.removeItem("access_token"); } catch {}
+        window.location.replace("/login");
+      }
+    });
+  }
+
+  // ============================================================
+  // State
+  // ============================================================
+  A.state.subprogramas = Array.isArray(A.state.subprogramas) ? A.state.subprogramas : [];
+  A.state.submodulos = Array.isArray(A.state.submodulos) ? A.state.submodulos : [];
+  A.state.activeSubp = A.state.activeSubp || null;
+  A.state.activeSubm = A.state.activeSubm || null;
+
+  A.state.ies = A.state.ies || null;      // {id, slug, nombre, _source, _trusted}
+  A.state.iesList = Array.isArray(A.state.iesList) ? A.state.iesList : [];
+
+  // ============================================================
   // Role helpers
   // ============================================================
   function role() {
@@ -242,7 +490,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const isIES = () => role() === "ies";
 
   function getDisplayName() {
-    const p = A.parseJwt?.();
+    const p = A.parseJwt?.() || {};
     const raw = p?.nombre || p?.name || p?.usuario || p?.email || "";
     if (!raw) return "👋";
     const s = String(raw);
@@ -274,7 +522,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // Admin lock (sin IES seleccionada)
+  // Admin lock
   // ============================================================
   const isAdminLocked = () => isAdmin() && !A.state?.ies?.id;
 
@@ -291,9 +539,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   function forceCloseSubmodsDrawer() {
-    try {
-      canvas?.hide();
-    } catch {}
+    try { canvas?.hide(); } catch {}
     if (canvasEl) {
       canvasEl.classList.remove("show");
       canvasEl.style.visibility = "hidden";
@@ -302,7 +548,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     cleanupBackdrops();
   }
 
-  // ✅ si Bootstrap dispara hidden, limpiamos igual (evita “pantalla bloqueada”)
   if (canvasEl && !canvasEl.dataset.cleanupBound) {
     canvasEl.dataset.cleanupBound = "1";
     canvasEl.addEventListener("hidden.bs.offcanvas", () => cleanupBackdrops());
@@ -329,299 +574,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // ✅ Coach Astra (FIX REAL: NO bloquea clicks + la X siempre funciona)
-  // - Cambié la implementación para evitar el bug de pointer-events en el parent.
-  // ============================================================
-  const COACH_KEY = "astra_onboarding_v1_done";
-
-  let coach = null; // {img,bubble,arrow,msg, closeBtn, _cleanup}
-  let coachTimer = null;
-
-  function injectCoachStylesOnce() {
-    if (document.getElementById("astraCoachStyles")) return;
-    const st = document.createElement("style");
-    st.id = "astraCoachStyles";
-    st.textContent = `
-      .astra-coach__img {
-        position: fixed;
-        width: 240px;
-        height: auto;
-        filter: drop-shadow(0 12px 28px rgba(0,0,0,.55));
-        pointer-events: none;
-        transform: translate(-50%, -50%);
-        z-index: 9998;
-      }
-      .astra-coach__bubble {
-        position: fixed;
-        max-width: 340px;
-        padding: 12px 12px;
-        border-radius: 12px;
-        background: rgba(10,14,28,.86);
-        border: 1px solid rgba(255,255,255,.12);
-        box-shadow: 0 18px 44px rgba(0,0,0,.45);
-        color: rgba(255,255,255,.92);
-        font-size: 13px;
-        line-height: 1.35;
-        pointer-events: auto; /* ✅ clickeable */
-        backdrop-filter: blur(10px);
-        z-index: 9999;
-      }
-      .astra-coach__title {
-        font-weight: 800;
-        font-size: 12px;
-        opacity: .95;
-        margin-bottom: 4px;
-        display:flex;
-        justify-content: space-between;
-        gap: 8px;
-        align-items: center;
-      }
-      .astra-coach__close {
-        width: 28px;
-        height: 28px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,.14);
-        background: rgba(255,255,255,.06);
-        color: rgba(255,255,255,.85);
-        cursor: pointer;
-        pointer-events: auto;
-      }
-      .astra-coach__close:hover { background: rgba(255,255,255,.10); }
-      .astra-coach__arrow {
-        position: fixed;
-        width: 14px;
-        height: 14px;
-        transform: rotate(45deg);
-        background: rgba(10,14,28,.86);
-        border-left: 1px solid rgba(255,255,255,.12);
-        border-top: 1px solid rgba(255,255,255,.12);
-        pointer-events: none;
-        z-index: 9999;
-      }
-    `;
-    document.head.appendChild(st);
-  }
-
-  function ensureCoach() {
-    if (coach) return coach;
-    injectCoachStylesOnce();
-
-    const img = document.createElement("img");
-    img.className = "astra-coach__img";
-    img.src = "/static/img/astra_point.png";
-    img.onerror = () => (img.src = "/static/img/astra.png");
-    img.alt = "Astra";
-    img.style.display = "none";
-
-    const arrow = document.createElement("div");
-    arrow.className = "astra-coach__arrow";
-    arrow.style.display = "none";
-
-    const bubble = document.createElement("div");
-    bubble.className = "astra-coach__bubble";
-    bubble.style.display = "none";
-    bubble.innerHTML = `
-      <div class="astra-coach__title">
-        <span>Astra</span>
-        <button class="astra-coach__close" type="button" title="Cerrar">×</button>
-      </div>
-      <div class="astra-coach__msg">…</div>
-    `;
-
-    const closeBtn = bubble.querySelector(".astra-coach__close");
-    const msg = bubble.querySelector(".astra-coach__msg");
-
-    document.body.appendChild(img);
-    document.body.appendChild(arrow);
-    document.body.appendChild(bubble);
-
-    coach = { img, arrow, bubble, msg, closeBtn, _cleanup: null };
-    return coach;
-  }
-
-  function setCoachContent({ text, pose = "point" } = {}) {
-    const c = ensureCoach();
-    const mapPose = {
-      saludo: "/static/img/astra_saludo.png",
-      point: "/static/img/astra_point.png",
-      stats: "/static/img/astra_stats.png",
-      exit: "/static/img/astra_exit.png",
-    };
-    c.img.src = mapPose[pose] || mapPose.point;
-    c.msg.textContent = text || "";
-  }
-
-  function positionCoachToTarget(targetEl) {
-    const c = ensureCoach();
-    const r = targetEl.getBoundingClientRect();
-
-    const tx = r.left + r.width * 0.65;
-    const ty = r.top + r.height * 0.40;
-
-    const ax = Math.max(120, tx - 200);
-    const ay = Math.min(window.innerHeight - 140, ty + 90);
-
-    const bx = Math.min(window.innerWidth - 380, tx + 120);
-    const by = Math.max(20, ty - 40);
-
-    const arx = Math.min(window.innerWidth - 30, bx - 10);
-    const ary = Math.max(20, by + 18);
-
-    c.img.style.left = `${ax}px`;
-    c.img.style.top = `${ay}px`;
-
-    c.bubble.style.left = `${bx}px`;
-    c.bubble.style.top = `${by}px`;
-
-    c.arrow.style.left = `${arx}px`;
-    c.arrow.style.top = `${ary}px`;
-  }
-
-  function hideCoach(markDone = false) {
-    if (!coach) return;
-    clearTimeout(coachTimer);
-
-    coach.img.style.display = "none";
-    coach.arrow.style.display = "none";
-    coach.bubble.style.display = "none";
-
-    coach._cleanup?.();
-    coach._cleanup = null;
-
-    if (markDone) {
-      try {
-        localStorage.setItem(COACH_KEY, "1");
-      } catch {}
-    }
-  }
-
-  function showCoach({ target, text, pose = "point", autoCloseMs = 0 } = {}) {
-    if (!target) return;
-    const c = ensureCoach();
-    clearTimeout(coachTimer);
-
-    setCoachContent({ text, pose });
-    positionCoachToTarget(target);
-
-    c.img.style.display = "block";
-    c.arrow.style.display = "block";
-    c.bubble.style.display = "block";
-
-    const onMove = () => {
-      if (c.bubble.style.display !== "block") return;
-      positionCoachToTarget(target);
-    };
-    window.addEventListener("resize", onMove, { passive: true });
-    window.addEventListener("scroll", onMove, { passive: true });
-
-    c._cleanup = () => {
-      window.removeEventListener("resize", onMove);
-      window.removeEventListener("scroll", onMove);
-    };
-
-    if (autoCloseMs && autoCloseMs > 0) {
-      coachTimer = setTimeout(() => hideCoach(false), autoCloseMs);
-    }
-  }
-
-  function shouldAutoCoach() {
-    try {
-      return localStorage.getItem(COACH_KEY) !== "1";
-    } catch {
-      return true;
-    }
-  }
-
-  // ✅ Close always works (X + ESC), sin depender de bubbling raro
-  (function bindCoachCloseOnce() {
-    if (window.__astraCoachCloseBound) return;
-    window.__astraCoachCloseBound = true;
-
-    document.addEventListener("click", (ev) => {
-      const btn = ev.target?.closest?.(".astra-coach__close");
-      if (btn) hideCoach(true);
-    });
-
-    document.addEventListener("keydown", (ev) => {
-      if (ev.key === "Escape") hideCoach(true);
-    });
-  })();
-
-  // expone para botón "Guía Astra"
-  A.openGuide = function () {
-    if (!isIES()) return;
-    const first = field?.querySelector(".subp-node");
-    if (!first) return;
-    showCoach({
-      target: first,
-      pose: "saludo",
-      text: "Elige un subprograma para ver sus submódulos. Luego abre un submódulo y registra evidencias.",
-      autoCloseMs: 0,
-    });
-  };
-
-  // ============================================================
-  // ✅ Reponer botón “Guía Astra” si desapareció del HTML
-  // ============================================================
-  function ensureGuideButton() {
-    // Si ya existe, no hago nada
-    if (document.getElementById("btnGuide")) return;
-
-    // Intento insertarlo cerca del resumen general
-    const anchor = btnResumenGlobal?.parentElement || btnResumenGlobal;
-    const parent = anchor?.parentElement;
-    if (!parent) return;
-
-    const btn = document.createElement("button");
-    btn.id = "btnGuide";
-    btn.type = "button";
-    btn.className = "btn btn-outline-light btn-sm";
-    btn.textContent = "Guía Astra";
-    btn.style.marginLeft = "8px";
-
-    parent.insertBefore(btn, anchor?.nextSibling || null);
-
-    btn.addEventListener("click", () => {
-      if (typeof A.openGuide === "function") A.openGuide();
-    });
-  }
-
-  // ============================================================
-  // Logout (una sola vez)
-  // ============================================================
-  if (btnLogout && !btnLogout.dataset.wired) {
-    btnLogout.dataset.wired = "1";
-    btnLogout.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      if (typeof A.logout === "function") A.logout();
-      else {
-        try {
-          localStorage.removeItem("access_token");
-        } catch {}
-        try {
-          sessionStorage.removeItem("access_token");
-        } catch {}
-        window.location.replace("/login");
-      }
-    });
-  }
-
-  // ============================================================
-  // State
-  // ============================================================
-  A.state.subprogramas = Array.isArray(A.state.subprogramas) ? A.state.subprogramas : [];
-  A.state.submodulos = Array.isArray(A.state.submodulos) ? A.state.submodulos : [];
-  A.state.activeSubp = A.state.activeSubp || null;
-  A.state.activeSubm = A.state.activeSubm || null;
-
-  A.state.ies = A.state.ies || null; // {id, slug, nombre, _source, _trusted}
-  A.state.iesList = Array.isArray(A.state.iesList) ? A.state.iesList : [];
-
-  // ============================================================
   // showOnly
   // ============================================================
   function showOnly(panel) {
-    hideCoach(false); // ✅ nunca dejes la guía pegada
+    hideCoach(false);
 
     if (isAdminLocked()) {
       resetLockedAdminUI();
@@ -647,10 +603,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     setHidden(resumenPanel, !resumenIsVisible);
     if (constellation) setHidden(constellation, panel !== "home");
 
-    // ✅ al volver a home, re-render por si algo quedó raro
     if (panel === "home") {
       renderSubprogramas();
-      ensureGuideButton();
+      if (shouldAutoCoach()) {
+        const first = field?.querySelector(".subp-node");
+        if (first) {
+          showCoach({
+            target: first,
+            pose: "saludo",
+            text: "Elige un subprograma para ver sus submódulos. Luego abre un submódulo y registra evidencias.",
+            autoCloseMs: 0,
+          });
+        }
+      }
     }
   }
 
@@ -659,8 +624,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ============================================================
   function toastHttpError(e, context = "") {
     const status = e?.status;
-    const msgLower = String(e?.message || "").toLowerCase();
-
     if (status === 401) {
       A.toast({
         type: "warning",
@@ -670,33 +633,17 @@ document.addEventListener("DOMContentLoaded", async () => {
       });
       return;
     }
-
     if (status === 403) {
-      // ✅ mensaje específico para el caso que te está pegando
-      if (msgLower.includes("require") && msgLower.includes("admin")) {
-        A.toast({
-          type: "danger",
-          title: "Permisos",
-          msg:
-            (context ? `${context}. ` : "") +
-            "El backend está exigiendo rol ADMIN para esta acción. " +
-            "Si estás logueado como IES, hay que ajustar el permiso del endpoint en backend.",
-          ms: 10000,
-        });
-        return;
-      }
-
       A.toast({
         type: "danger",
         title: "Permisos",
         msg:
           (context ? `${context}. ` : "") +
-          "El backend rechazó la operación por permisos. Revisa el rol y la IES activa.",
+          "El backend rechazó la operación por permisos. Revisa rol, token y que la IES activa sea la tuya.",
         ms: 8500,
       });
       return;
     }
-
     A.toast({
       type: "danger",
       title: "Error",
@@ -727,77 +674,91 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // ✅ IES context resolver (SIN /auth/me)
+  // ✅ IES context resolver (NO ADIVINAR POR EMAIL)
   // ============================================================
-  function resolveIESContext(p) {
-    const iesId = p?.ies_id ?? p?.iesId ?? p?.iesID ?? null;
+  function resolveIESContextFromCoreAndJwt() {
+    const p = A.parseJwt?.() || {};
 
-    const jwtSlug =
-      p?.ies_slug || p?.iesSlug || p?.institucion_slug || p?.org_slug || "";
+    // preferencia: core.js (guardado)
+    let slug = "";
+    let id = null;
 
-    let storedSlug = "";
     try {
-      storedSlug =
+      slug =
         (typeof A.getIesSlug === "function" ? A.getIesSlug() : "") ||
         localStorage.getItem("ies_slug") ||
         "";
     } catch {}
 
-    const slug = (jwtSlug || storedSlug || "").toString().trim();
-    if (slug) {
-      return {
-        id: iesId,
-        slug,
-        nombre: p?.ies_nombre || p?.iesNombre || slug,
-        _source: jwtSlug ? "jwt" : "storage",
-        _trusted: !!jwtSlug,
-      };
+    try {
+      const v =
+        (typeof A.getIesId === "function" ? A.getIesId() : null) ??
+        (localStorage.getItem("ies_id") || "");
+      const n = Number(v);
+      id = Number.isFinite(n) ? n : null;
+    } catch {
+      id = null;
     }
 
-    const email = p?.email || p?.usuario || "";
-    const fallbackSlug = email && String(email).includes("@") ? String(email).split("@")[0] : null;
-    if (fallbackSlug) {
-      return { id: iesId, slug: fallbackSlug, nombre: fallbackSlug, _source: "email-fallback", _trusted: false };
-    }
+    // si core no pudo, intenta del JWT incluyendo nested
+    const jwtSlug =
+      p?.ies_slug ||
+      p?.iesSlug ||
+      p?.institucion_slug ||
+      p?.institution_slug ||
+      p?.org_slug ||
+      p?.orgSlug ||
+      p?.ies?.slug ||               // ✅ nested
+      p?.institucion?.slug ||       // ✅ nested
+      "";
 
-    return { id: iesId, slug: null, nombre: null, _source: "none", _trusted: false };
+    const jwtId =
+      p?.ies_id ??
+      p?.iesId ??
+      p?.iesID ??
+      p?.ies?.id ??
+      p?.institucion?.id ??
+      null;
+
+    const finalSlug = (jwtSlug || slug || "").toString().trim();
+    const finalId = (() => {
+      const n = Number(jwtId ?? id);
+      return Number.isFinite(n) ? n : null;
+    })();
+
+    return {
+      id: finalId,
+      slug: finalSlug || null,
+      nombre: p?.ies_nombre || p?.iesNombre || finalSlug || null,
+      _source: jwtSlug ? "jwt" : (slug ? "storage" : "none"),
+      _trusted: !!jwtSlug || !!slug,
+    };
   }
 
   // ============================================================
   // Loaders: IES context + IES list (admin)
   // ============================================================
   async function loadIESContext() {
-    const p = A.parseJwt?.() || {};
     enforceRoleUI();
 
     if (isIES()) {
-      const ctx = resolveIESContext(p);
+      const ctx = resolveIESContextFromCoreAndJwt();
       A.state.ies = ctx.slug ? ctx : { ...ctx, slug: null };
 
-      if (ctx.slug) {
-        setUserActive(`Institución activa: ${ctx.nombre || ctx.slug}`, true);
-
-        if (!ctx._trusted) {
-          A.toast({
-            type: "warning",
-            title: "Aviso",
-            msg:
-              "No encontré ies_slug en el token. Estoy usando un slug estimado. " +
-              "Si no coincide con la IES real, el backend puede bloquear acciones.",
-            ms: 9000,
-          });
-        }
-      } else {
+      if (!ctx.slug) {
         setUserActive("Institución activa: (sin slug)", true);
         A.toast({
           type: "danger",
-          title: "Falta IES",
+          title: "Falta IES (slug)",
           msg:
-            "No pude determinar la IES (slug). No se podrán cargar evidencias. " +
-            "Solución ideal: incluir ies_slug dentro del JWT.",
+            "Tu token/sesión no trae el ies_slug. No puedo llamar operativa porque el backend lo bloqueará. " +
+            "Solución ideal: incluir ies_slug en el JWT o guardarlo al iniciar sesión.",
           ms: 10000,
         });
+        return;
       }
+
+      setUserActive(`Institución activa: ${ctx.nombre || ctx.slug}`, true);
       return;
     }
 
@@ -834,11 +795,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             msg: `${found.nombre} (${found.slug}). Abriendo Resumen general…`,
             ms: 3200,
           });
-          try {
-            await openResumenGeneral();
-          } catch (e) {
-            toastHttpError(e, "No se pudo abrir Resumen general");
-          }
+          try { await openResumenGeneral(); } catch (e) { toastHttpError(e, "No se pudo abrir Resumen general"); }
         } else {
           A.state.ies = null;
           setUserActive("", false);
@@ -926,6 +883,13 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
+    // ✅ si falta slug, no sigas (evita 403 “admin” por slug errado)
+    if (!A.state.ies?.slug) {
+      A.state.subprogramas = [];
+      if (field) field.innerHTML = `<div class="text-danger small">No hay ies_slug en sesión. No puedo cargar catálogo.</div>`;
+      return;
+    }
+
     const data = await A.api("/catalogo/subprogramas");
     A.state.subprogramas = Array.isArray(data) ? data : [];
     renderSubprogramas();
@@ -1000,56 +964,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     return `/operacion/ies/${slug}/submodulos/${submoduloId}/evidencias`;
   }
 
-  // ✅ FIX: para IES preferimos usar ies_id si existe (según tu API real)
+  // ✅ FIX: tu backend tiene /api/resumen/submodulo/{ies_id}/{submodulo_id}
   function resumenUrlForSubmodulo(submoduloId) {
-    const iesId = A.state.ies?.id || null;
-
-    // Prioridad: endpoint con (ies_id, submodulo_id) si existe el id
-    if (iesId) return `/api/resumen/submodulo/${iesId}/${submoduloId}`;
-
-    // Fallback legado (si tu backend lo soporta)
-    return `/api/resumen/submodulo/${submoduloId}`;
+    const iesId = A.state.ies?.id || (typeof A.getIesId === "function" ? A.getIesId() : null);
+    if (!iesId) throw new Error("Falta ies_id para cargar resumen.");
+    return `/api/resumen/submodulo/${iesId}/${submoduloId}`;
   }
 
-  // ✅ FIX: si backend devuelve 403 "Require rol admin", no “rompemos” la UI
   async function fetchEvidencias(submoduloId) {
-    try {
-      const url = evidenciasUrlForSubmodulo(submoduloId);
-      return await A.api(url);
-    } catch (e) {
-      const status = e?.status;
-      const msgLower = String(e?.message || "").toLowerCase();
-
-      if (status === 403 && msgLower.includes("require") && msgLower.includes("admin")) {
-        // Mostramos mensaje claro y dejamos la tabla vacía (para que la operativa no se “dañe”)
-        A.toast({
-          type: "danger",
-          title: "Permisos",
-          msg:
-            "El backend está exigiendo rol ADMIN para cargar evidencias. " +
-            "Esto es un permiso del endpoint (backend), no del planner.",
-          ms: 10000,
-        });
-        return [];
-      }
-
-      throw e;
-    }
+    return await A.api(evidenciasUrlForSubmodulo(submoduloId));
   }
 
-  // ✅ FIX: fallback si tu backend no soporta /api/resumen/submodulo/{submoduloId}
   async function fetchResumenSubmodulo(submoduloId) {
-    const primary = resumenUrlForSubmodulo(submoduloId);
-    try {
-      return await A.api(primary);
-    } catch (e) {
-      if (e?.status === 404) {
-        // intento legado
-        const legacy = `/api/resumen/submodulo/${submoduloId}`;
-        return await A.api(legacy);
-      }
-      throw e;
-    }
+    return await A.api(resumenUrlForSubmodulo(submoduloId));
   }
 
   async function saveEvidenciaPatch(evidenciaId, payload) {
@@ -1066,20 +993,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     hideCoach(true);
 
     if (!isIES()) {
-      A.toast({
-        type: "warning",
-        title: "Modo Admin",
-        msg: "El Admin no llena operativa. Usa Resumen general.",
-        ms: 4200,
-      });
+      A.toast({ type: "warning", title: "Modo Admin", msg: "El Admin no llena operativa. Usa Resumen general.", ms: 4200 });
       return;
     }
+
+    // ✅ aquí está la clave: si no hay slug REAL, NO dispares el endpoint (evita 403 “admin”)
     if (!A.state.ies?.slug) {
       A.toast({
         type: "danger",
         title: "Sin IES (slug)",
-        msg: "No se puede cargar operativa porque no se conoce el ies_slug. Revisa JWT.",
-        ms: 9000,
+        msg:
+          "No puedo cargar evidencias porque no tengo el ies_slug real de tu sesión. " +
+          "Si el planner “adivina” el slug, el backend lo bloquea con 'Requiere rol admin'.",
+        ms: 9500,
       });
       return;
     }
@@ -1149,9 +1075,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const opStatus = document.getElementById("opStatus");
 
     btnBackToMap?.addEventListener("click", () => showOnly("home"));
-    btnOpenResumen?.addEventListener("click", async () => {
-      await openResumenFromPlanner(submodulo);
-    });
+    btnOpenResumen?.addEventListener("click", async () => { await openResumenFromPlanner(submodulo); });
 
     function optionBool(v) {
       if (v === null || v === undefined) {
@@ -1169,12 +1093,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         { val: 70, label: "CUASI SATISFAC." },
         { val: 100, label: "SATISFACTORIO" },
       ];
-      return levels
-        .map(
-          (x) =>
-            `<option value="${x.val}" ${Number(v) === x.val ? "selected" : ""}>${x.label}</option>`
-        )
-        .join("");
+      return levels.map((x) => `<option value="${x.val}" ${Number(v) === x.val ? "selected" : ""}>${x.label}</option>`).join("");
     }
 
     function rowHTML(r) {
@@ -1257,27 +1176,18 @@ document.addEventListener("DOMContentLoaded", async () => {
             responsable: tr.querySelector(".op-responsable")?.value || "",
             fecha_inicio: tr.querySelector(".op-inicio")?.value || null,
             fecha_fin: tr.querySelector(".op-fin")?.value || null,
-            avance_pct: Math.max(
-              0,
-              Math.min(100, Number(tr.querySelector(".op-avance")?.value || 0))
-            ),
+            avance_pct: Math.max(0, Math.min(100, Number(tr.querySelector(".op-avance")?.value || 0))),
           };
 
           try {
             await saveEvidenciaPatch(eid, payload);
             btn.textContent = "Listo ✓";
-            setTimeout(() => {
-              btn.textContent = "Guardar";
-              btn.disabled = false;
-            }, 900);
+            setTimeout(() => { btn.textContent = "Guardar"; btn.disabled = false; }, 900);
           } catch (e) {
             console.error(e);
             toastHttpError(e, "No se pudo guardar evidencia");
             btn.textContent = "Error";
-            setTimeout(() => {
-              btn.textContent = "Guardar";
-              btn.disabled = false;
-            }, 1200);
+            setTimeout(() => { btn.textContent = "Guardar"; btn.disabled = false; }, 1200);
           }
         });
       }
@@ -1285,8 +1195,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       console.error(e);
       toastHttpError(e, "No se pudo cargar evidencias");
       if (opStatus) opStatus.textContent = "Error cargando evidencias.";
-      if (tbody)
-        tbody.innerHTML = `<tr><td colspan="8" class="text-danger small">No se pudo cargar evidencias.</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-danger small">No se pudo cargar evidencias.</td></tr>`;
     }
   }
 
@@ -1301,8 +1210,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
     if (!resumenPanel) return;
-
-    const renderer = A.openResumenSubmodulo;
 
     showOnly("resumen");
     forceCloseSubmodsDrawer();
@@ -1319,6 +1226,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     try {
       const data = await fetchResumenSubmodulo(submodulo.id);
 
+      const renderer = A.openResumenSubmodulo;
       if (typeof renderer === "function") {
         const iesNombre = A.state.ies?.nombre || A.state.ies?.slug || "—";
         renderer(resumenPanel, data, {
@@ -1343,9 +1251,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             </div>
             <button id="btnBackFallback" class="btn btn-outline-light btn-sm">Volver</button>
           </div>
-          <pre class="mt-3 small text-light" style="white-space:pre-wrap;">${escapeHtml(
-            JSON.stringify(data, null, 2)
-          )}</pre>
+          <pre class="mt-3 small text-light" style="white-space:pre-wrap;">${escapeHtml(JSON.stringify(data, null, 2))}</pre>
         </div>
       `;
 
@@ -1370,7 +1276,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  // Resumen general (Admin + IES)
+  // Resumen general (Admin + IES)  (tu código igual, sin cambios críticos)
   // ============================================================
   function fmtDate(s) {
     if (!s) return "—";
@@ -1423,14 +1329,10 @@ document.addEventListener("DOMContentLoaded", async () => {
           <div>
             <div class="text-secondary small">RESUMEN GENERAL</div>
             <h4 class="mb-1">Subprogramas · Submódulos</h4>
-            <div class="text-secondary small">IES: ${escapeHtml(iesNombre)} ${
-      iesId ? `· ID: ${escapeHtml(String(iesId))}` : ""
-    }</div>
+            <div class="text-secondary small">IES: ${escapeHtml(iesNombre)} ${iesId ? `· ID: ${escapeHtml(String(iesId))}` : ""}</div>
           </div>
           <div class="d-flex gap-2">
-            <button id="btnBackRG" class="btn btn-outline-light btn-sm">${
-              isIES() ? "Volver al mapa" : "Volver"
-            }</button>
+            <button id="btnBackRG" class="btn btn-outline-light btn-sm">${isIES() ? "Volver al mapa" : "Volver"}</button>
           </div>
         </div>
 
@@ -1468,12 +1370,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (!resumenPanel) return;
 
     if (isAdminLocked()) {
-      A.toast({
-        type: "warning",
-        title: "Falta IES",
-        msg: "Selecciona una IES para abrir el Resumen general.",
-        ms: 4200,
-      });
+      A.toast({ type: "warning", title: "Falta IES", msg: "Selecciona una IES para abrir el Resumen general.", ms: 4200 });
       showAdminGateIfNeeded();
       return;
     }
@@ -1644,12 +1541,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  searchSubp?.addEventListener("input", () => {
-    if (isIES()) renderSubprogramas();
-  });
-  searchSubm?.addEventListener("input", () => {
-    if (isIES()) renderSubmodulos();
-  });
+  searchSubp?.addEventListener("input", () => { if (isIES()) renderSubprogramas(); });
+  searchSubm?.addEventListener("input", () => { if (isIES()) renderSubmodulos(); });
 
   submodulosList?.addEventListener("click", async (ev) => {
     if (!isIES()) return;
@@ -1673,7 +1566,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     await openResumenFromPlanner(A.state.activeSubm);
   });
 
-  // Resumen General (Admin + IES)
   let rgBusy = false;
   btnResumenGlobal?.addEventListener("click", async () => {
     if (rgBusy) return;
@@ -1727,9 +1619,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     await loadIESContext();
     await loadSubprogramas();
 
-    // ✅ asegura el botón guía
-    ensureGuideButton();
-
     if (isAdminLocked()) {
       resetLockedAdminUI();
       showAdminGateIfNeeded();
@@ -1751,7 +1640,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     showOnly("home");
     renderSubprogramas();
 
-    // ✅ Coach auto (solo 1era vez)
     if (shouldAutoCoach()) {
       const first = field?.querySelector(".subp-node");
       if (first) {
