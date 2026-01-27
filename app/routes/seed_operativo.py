@@ -33,3 +33,6 @@ def seed_operativo_por_ies(ies_slug: str, db: Session = Depends(get_db)):
 
     ensure_seed_operativo(db, ies["id"])
     return {"ok": True, "ies_slug": ies["slug"], "msg": "Seed operativo creado/actualizado"}
+@router.get("/debug/encoding")
+def debug_encoding():
+    return {"test": "Ética y transparencia – ñ á é í ó ú"}
