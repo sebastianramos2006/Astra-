@@ -79,12 +79,65 @@
   A.getRole = function () {
     const r = (A.getRoleRaw() || "").toLowerCase();
     if (r === "admin") return "admin";
-    if (r === "cliente" || r === "ies" || r === "institucion" || r === "institution") return "ies";
+    if (r === "cliente" || r === "ies" || r === "institucion" || r === "institution")
+      return "ies";
     return r || "";
   };
 
   A.isAdmin = () => A.getRole() === "admin";
   A.isIES = () => A.getRole() === "ies";
+
+  // --------------------------
+  // ✅ Session context (IES)
+  // --------------------------
+  A.refreshSession = async function () {
+    const token = A.auth.get();
+    if (!token) return null;
+
+    try {
+      const res = await fetch("/auth/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) return null;
+
+      const me = await res.json();
+
+      // Persist for all modules (planner/operativa/resumen)
+      try {
+        localStorage.setItem("ies_slug", me?.ies_slug || "");
+        localStorage.setItem("rol", me?.rol || "");
+      } catch {}
+
+      // In-memory
+      A.state.ies_slug = me?.ies_slug || "";
+      A.state.rol = me?.rol || "";
+
+      return me;
+    } catch {
+      return null;
+    }
+  };
+
+  A.getIesSlug = function () {
+    if (A.state?.ies_slug) return A.state.ies_slug;
+    try {
+      return localStorage.getItem("ies_slug") || "";
+    } catch {
+      return "";
+    }
+  };
+
+  A.clearSessionContext = function () {
+    try {
+      localStorage.removeItem("ies_slug");
+      localStorage.removeItem("rol");
+    } catch {}
+    try {
+      delete A.state.ies_slug;
+      delete A.state.rol;
+    } catch {}
+  };
 
   // --------------------------
   // Guard
@@ -104,7 +157,10 @@
   // --------------------------
   A.logout = function () {
     A.auth.clear();
-    try { A.state = {}; } catch {}
+    A.clearSessionContext();
+    try {
+      A.state = {};
+    } catch {}
     window.location.replace("/login");
   };
 
@@ -229,7 +285,9 @@
       b.type = "button";
       b.textContent = a.label || "Acción";
       b.addEventListener("click", async () => {
-        try { await a.onClick?.(); } catch {}
+        try {
+          await a.onClick?.();
+        } catch {}
       });
       actionsBox.appendChild(b);
     });
@@ -244,7 +302,9 @@
 
   // helper: toast credenciales con copiar
   A.toastCreds = function ({ email, password, title = "Credenciales provisionales" } = {}) {
-    const msg = `${email ? "Email: " + email : ""}${email && password ? "\n" : ""}${password ? "Clave: " + password : ""}`.trim();
+    const msg = `${email ? "Email: " + email : ""}${email && password ? "\n" : ""}${
+      password ? "Clave: " + password : ""
+    }`.trim();
     return A.toast({
       type: "success",
       title,
@@ -256,7 +316,11 @@
               label: "Copiar email",
               onClick: async () => {
                 const ok = await copyToClipboard(email);
-                A.toast({ type: ok ? "success" : "warn", title: "Copiar", message: ok ? "Email copiado ✓" : "No pude copiar" });
+                A.toast({
+                  type: ok ? "success" : "warn",
+                  title: "Copiar",
+                  message: ok ? "Email copiado ✓" : "No pude copiar",
+                });
               },
             }
           : null,
@@ -265,7 +329,11 @@
               label: "Copiar clave",
               onClick: async () => {
                 const ok = await copyToClipboard(password);
-                A.toast({ type: ok ? "success" : "warn", title: "Copiar", message: ok ? "Clave copiada ✓" : "No pude copiar" });
+                A.toast({
+                  type: ok ? "success" : "warn",
+                  title: "Copiar",
+                  message: ok ? "Clave copiada ✓" : "No pude copiar",
+                });
               },
             }
           : null,
@@ -302,11 +370,14 @@
     }
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
-    // si hay token, damos bienvenida (sin molestar en /login)
+  document.addEventListener("DOMContentLoaded", async () => {
+    // si hay token, sincronizamos sesión (sin molestar en /login)
     if (!location.pathname.includes("/login")) {
       const t = A.auth.get();
-      if (t && String(t).split(".").length === 3) welcomeOnce();
+      if (t && String(t).split(".").length === 3) {
+        await A.refreshSession(); // ✅ asegura ies_slug actualizado
+        welcomeOnce();
+      }
     }
   });
 
@@ -316,8 +387,7 @@
   A.api = async function (path, opts = {}) {
     const token = A.auth.get();
 
-    const isFormData =
-      typeof FormData !== "undefined" && opts.body instanceof FormData;
+    const isFormData = typeof FormData !== "undefined" && opts.body instanceof FormData;
 
     const headers = Object.assign(
       isFormData ? {} : { "Content-Type": "application/json" },
