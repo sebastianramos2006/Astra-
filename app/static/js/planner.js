@@ -956,40 +956,65 @@ async function saveEvidenciaPatch(evidenciaId, payload) {
 
 
   // ============================================================
-  // Operativa (solo IES)
-  // ============================================================
-  async function openOperativa(submodulo) {
-    hideCoach(true);
+// Operativa (solo IES)
+// ============================================================
+async function openOperativa(submodulo) {
+  hideCoach(true);
 
-    if (!isIES()) {
-      toastCompat ({ type: "warning", title: "Modo Admin", msg: "El Admin no llena operativa. Usa Resumen general.", ms: 4200 });
-      return;
-    }
-
-    //  NUEVO: intenta resolver slug por ies_id antes de bloquear
-    await ensureIESResolved();
-
-    if (!A.state.ies?.slug) {
-      toastCompat({
-        type: "danger",
-        title: "Sin IES (slug)",
-        msg:
-          "No pude resolver ies_slug (ni desde sesión/storage, ni consultando /ies/ con ies_id). " +
-          "No puedo cargar evidencias todavía.",
-        ms: 9500,
-      });
-      return;
-    }
-
-    A.state.activeSubm = submodulo;
-    showOnly("operativa");
-    forceCloseSubmodsDrawer();
-
-    if (!operativaPanel) return;
-    const iesName = A.state.ies?.nombre || A.state.ies?.slug || "—";
-
-    operativaPanel.innerHTML = `...`;
+  if (!isIES()) {
+    toastCompat({
+      type: "warning",
+      title: "Modo Admin",
+      msg: "El Admin no llena operativa. Usa Resumen general.",
+      ms: 4200,
+    });
+    return;
   }
+
+  A.state.activeSubm = submodulo;
+  showOnly("operativa");
+  forceCloseSubmodsDrawer();
+
+  if (!operativaPanel) return;
+
+  const iesName = A.state.ies?.nombre || A.state.ies?.slug || "—";
+
+  // ✅ pinta skeleton/encabezado primero
+  operativaPanel.innerHTML = `
+    <div class="container-fluid mt-3">
+      <div class="text-secondary small">OPERATIVA</div>
+      <h4 class="mb-1">${escapeHtml(submodulo?.nombre || "Submódulo")}</h4>
+      <div class="text-secondary small">IES: ${escapeHtml(iesName)}</div>
+      <hr class="my-2" />
+      <div class="text-secondary small">Cargando evidencias…</div>
+      <div id="evidenciasWrap" class="mt-2"></div>
+    </div>
+  `;
+
+  const wrap = document.getElementById("evidenciasWrap");
+  if (!wrap) return;
+
+  try {
+    // ✅ AQUÍ se llama al endpoint correcto (IES: /operacion/submodulos/:id/evidencias)
+    const evidencias = await fetchEvidencias(submodulo.id);
+
+    // ✅ por ahora render simple para confirmar que YA LLEGA DATA
+    const arr = Array.isArray(evidencias) ? evidencias : (evidencias?.items || []);
+    wrap.innerHTML = `
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div class="text-secondary small">Evidencias encontradas: <b>${arr.length}</b></div>
+      </div>
+      <pre class="mt-2 small text-light" style="white-space:pre-wrap; border:1px solid rgba(255,255,255,.12); padding:10px; border-radius:12px; max-height:420px; overflow:auto;">${escapeHtml(JSON.stringify(arr.slice(0, 10), null, 2))}</pre>
+    `;
+
+    // ✅ Cuando esto funcione, aquí ya metemos tu tabla bonita.
+  } catch (e) {
+    console.error(e);
+    toastHttpError(e, "No se pudieron cargar evidencias");
+    wrap.innerHTML = `<div class="text-danger small">No se pudieron cargar evidencias.</div>`;
+  }
+}
+
   // ============================================================
   // Resumen (submódulo)
   // ============================================================
