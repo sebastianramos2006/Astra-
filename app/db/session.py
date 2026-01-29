@@ -82,3 +82,4 @@ def test_db_connection() -> bool:
         return True
     except Exception:
         return False
+

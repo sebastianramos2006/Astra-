@@ -204,11 +204,14 @@ function toastCompat({
 
   const constellation = document.querySelector(".constellation");
 
-  // ============================================================
-//  Coach Astra (igual que tu versión)
+ // ============================================================
+//  Coach Astra (TOUR 4 pasos + 4 imágenes)
 // ============================================================
-const COACH_KEY = "astra_onboarding_v1_done";
+const COACH_KEY = "astra_onboarding_v2_done"; // <- cambia a v2 para que se muestre 1 vez aunque ya viste v1
 let coach = null;
+let coachTimer = null;
+let coachStep = 0;
+let coachLastTarget = null;
 
 function ensureCoach() {
   if (coach) return coach;
@@ -219,7 +222,7 @@ function ensureCoach() {
 
   const img = document.createElement("img");
   img.className = "astra-coach__img";
-  img.src = "/static/img/astra_point.png";
+  img.src = "/static/img/astra_saludo.png";
   img.onerror = () => (img.src = "/static/img/astra.png");
   img.alt = "Astra";
 
@@ -234,30 +237,61 @@ function ensureCoach() {
       <span>Astra</span>
       <button class="astra-coach__close" title="Cerrar">×</button>
     </div>
+
     <div class="astra-coach__msg">…</div>
+
+    <div class="astra-coach__footer"
+         style="display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:10px;">
+      <button type="button" class="btn btn-outline-light btn-sm astra-coach__back">Atras</button>
+      <div class="astra-coach__dots" style="opacity:.75; font-size:12px;">1/4</div>
+      <button type="button" class="btn btn-light btn-sm astra-coach__next">Siguiente</button>
+    </div>
   `;
 
   bubble.querySelector(".astra-coach__close")?.addEventListener("click", () => hideCoach(true));
+  bubble.querySelector(".astra-coach__back")?.addEventListener("click", () => tourPrev());
+  bubble.querySelector(".astra-coach__next")?.addEventListener("click", () => tourNext());
 
   root.appendChild(img);
   root.appendChild(arrow);
   root.appendChild(bubble);
   document.body.appendChild(root);
 
-  coach = { root, img, bubble, arrow, msg: bubble.querySelector(".astra-coach__msg") };
+  coach = {
+    root,
+    img,
+    bubble,
+    arrow,
+    msg: bubble.querySelector(".astra-coach__msg"),
+    dots: bubble.querySelector(".astra-coach__dots"),
+    btnBack: bubble.querySelector(".astra-coach__back"),
+    btnNext: bubble.querySelector(".astra-coach__next"),
+  };
+
   return coach;
 }
 
-function setCoachContent({ text, pose = "point" } = {}) {
+function setCoachPose(pose = "point") {
   const c = ensureCoach();
   const mapPose = {
     saludo: "/static/img/astra_saludo.png",
     point: "/static/img/astra_point.png",
-    stats: "/static/img/astra_stats.png",
+    checklist: "/static/img/astra_checklist.png",
     exit: "/static/img/astra_exit.png",
   };
   c.img.src = mapPose[pose] || mapPose.point;
-  c.msg.textContent = text || "";
+}
+
+function clearCoachTargetHighlight() {
+  if (coachLastTarget) coachLastTarget.classList.remove("astra-coach--target");
+  coachLastTarget = null;
+}
+
+function applyCoachTargetHighlight(targetEl) {
+  clearCoachTargetHighlight();
+  if (!targetEl) return;
+  targetEl.classList.add("astra-coach--target");
+  coachLastTarget = targetEl;
 }
 
 function positionCoachToTarget(targetEl) {
@@ -267,9 +301,11 @@ function positionCoachToTarget(targetEl) {
   const tx = r.left + r.width * 0.65;
   const ty = r.top + r.height * 0.40;
 
-  const ax = Math.max(120, tx - 190);
-  const ay = Math.min(window.innerHeight - 140, ty + 80);
+  // Astra mas "afuera" y grande
+  const ax = Math.max(140, tx - 260);
+  const ay = Math.min(window.innerHeight - 160, ty + 90);
 
+  // burbuja al lado del target
   const bx = Math.min(window.innerWidth - 360, tx + 120);
   const by = Math.max(20, ty - 40);
 
@@ -286,21 +322,26 @@ function positionCoachToTarget(targetEl) {
   c.arrow.style.top = `${ary}px`;
 }
 
-let coachTimer = null;
 function showCoach({ target, text, pose = "point", autoCloseMs = 0 } = {}) {
   if (!target) return;
+
   const c = ensureCoach();
   clearTimeout(coachTimer);
 
-  setCoachContent({ text, pose });
-  positionCoachToTarget(target);
+  setCoachPose(pose);
+  c.msg.textContent = text || "";
 
   c.root.style.display = "block";
 
+  applyCoachTargetHighlight(target);
+  positionCoachToTarget(target);
+
   const onMove = () => {
     if (c.root.style.display !== "block") return;
-    positionCoachToTarget(target);
+    if (!coachLastTarget) return;
+    positionCoachToTarget(coachLastTarget);
   };
+
   window.addEventListener("resize", onMove, { passive: true });
   window.addEventListener("scroll", onMove, { passive: true });
 
@@ -317,9 +358,13 @@ function showCoach({ target, text, pose = "point", autoCloseMs = 0 } = {}) {
 function hideCoach(markDone = false) {
   if (!coach) return;
   clearTimeout(coachTimer);
+
   coach.root.style.display = "none";
   coach._cleanup?.();
   coach._cleanup = null;
+
+  clearCoachTargetHighlight();
+
   if (markDone) {
     try { localStorage.setItem(COACH_KEY, "1"); } catch {}
   }
@@ -329,18 +374,113 @@ function shouldAutoCoach() {
   try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
 }
 
-// expone para botón "Guía"
-A.openGuide = function () {
-  if (!isIES()) return;
-  const first = field?.querySelector(".subp-node");
-  if (!first) return;
+// ============================================================
+// TOUR 4 PASOS
+// ============================================================
+function getTourSteps() {
+  const firstNode = () => field?.querySelector(".subp-node");
+  const canvasTarget = () => document.getElementById("submodsCanvas") || firstNode() || field || document.body;
+  const operativaTarget = () => operativaPanel || field || document.body;
+  const exitTarget = () => btnReset || field || document.body;
+
+  return [
+    {
+      pose: "saludo",
+      text:
+        "Hola, soy Astra. Te guio rapido:\n" +
+        "1) Elige un subprograma\n" +
+        "2) Abre un submodulo\n" +
+        "3) Llena evidencias en Operativa\n" +
+        "4) Revisa Resumen cuando quieras.",
+      target: () => document.querySelector(".stage-kicker") || firstNode() || field || document.body,
+    },
+    {
+      pose: "point",
+      text: "Paso 1: Haz clic en un subprograma para ver sus submodulos.",
+      target: () => firstNode() || field || document.body,
+    },
+    {
+      pose: "checklist",
+      text:
+        "Paso 2: Se abre el panel derecho.\n" +
+        "Elige un submodulo para abrir la Operativa y registrar evidencias.",
+      target: () => canvasTarget(),
+    },
+    {
+      pose: "exit",
+      text:
+        "Listo.\n" +
+        "Si quieres ver esta guia otra vez, usa el boton Guia.",
+      target: () => exitTarget(),
+    },
+  ];
+}
+
+function renderTourUI() {
+  const c = ensureCoach();
+  const steps = getTourSteps();
+  const total = steps.length;
+
+  if (c.dots) c.dots.textContent = `${coachStep + 1}/${total}`;
+  if (c.btnBack) c.btnBack.disabled = coachStep === 0;
+  if (c.btnNext) c.btnNext.textContent = coachStep === total - 1 ? "Terminar" : "Siguiente";
+}
+
+function tourShowStep(i) {
+  const steps = getTourSteps();
+  const idx = Math.max(0, Math.min(steps.length - 1, i));
+  coachStep = idx;
+
+  const s = steps[idx];
+  const targetEl = s.target?.();
+  const safeTarget = targetEl || field || document.body;
+
+  renderTourUI();
+
   showCoach({
-    target: first,
-    pose: "saludo",
-    text: "Elige un subprograma para ver sus submódulos. Luego abre un submódulo y registra evidencias.",
+    target: safeTarget,
+    pose: s.pose,
+    text: s.text,
     autoCloseMs: 0,
   });
+}
+
+function tourNext() {
+  const steps = getTourSteps();
+  if (coachStep >= steps.length - 1) {
+    hideCoach(true); // marca como visto en auto-onboarding
+    return;
+  }
+  tourShowStep(coachStep + 1);
+}
+
+function tourPrev() {
+  if (coachStep <= 0) return;
+  tourShowStep(coachStep - 1);
+}
+
+function startTour({ markDoneAtEnd = true } = {}) {
+  coachStep = 0;
+  tourShowStep(0);
+
+  // Si es manual, no queremos marcarlo "visto" al terminar
+  // (por eso en A.openGuide usamos markDoneAtEnd:false y al terminar solo cierra)
+  if (!markDoneAtEnd) {
+    // hack simple: cuando llegue a Terminar, que no marque done
+    const originalHide = hideCoach;
+    hideCoach = function (markDone) {
+      originalHide(false);
+      hideCoach = originalHide;
+    };
+  }
+}
+
+// expone para boton "Guia"
+A.openGuide = function () {
+  if (!isIES()) return;
+  startTour({ markDoneAtEnd: false });
 };
+
 
   // ============================================================
   // Logout
