@@ -15,7 +15,7 @@ class ChangePasswordIn(BaseModel):
 def change_my_password(
     payload: ChangePasswordIn,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user = Depends(get_current_user),
 ):
     if not verify_password(payload.current_password, user.password_hash):
         raise HTTPException(status_code=400, detail="Clave actual incorrecta.")
@@ -27,7 +27,6 @@ def change_my_password(
         raise HTTPException(status_code=400, detail="La nueva clave no puede ser igual a la actual.")
 
     user.password_hash = hash_password(payload.new_password)
-
     db.add(user)
     db.commit()
     db.refresh(user)

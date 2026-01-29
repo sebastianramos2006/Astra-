@@ -204,17 +204,61 @@ function toastCompat({
 
   const constellation = document.querySelector(".constellation");
 
- // ============================================================
-//  Coach Astra (TOUR 4 pasos + 4 imágenes)
 // ============================================================
-const COACH_KEY = "astra_onboarding_v2_done"; // cambia a v2 para que se muestre 1 vez aunque ya viste v1
+//  Coach Astra (TOUR 4 pasos + 4 imagenes) - Admin + IES
+// ============================================================
+const COACH_KEY = "astra_onboarding_v2_done"; // v2: se muestra 1 vez aunque ya viste v1
 let coach = null;
 let coachTimer = null;
 let coachStep = 0;
 let coachLastTarget = null;
 
+function injectCoachStylesOnce() {
+  if (document.getElementById("astraCoachStyles")) return;
+  const st = document.createElement("style");
+  st.id = "astraCoachStyles";
+  st.textContent = `
+    .astra-coach { position: fixed; inset: 0; z-index: 9999; pointer-events: none; }
+    .astra-coach__img { position: fixed; width: 300px; height: auto; filter: drop-shadow(0 14px 30px rgba(0,0,0,.60)); pointer-events: none; transform: translate(-50%, -50%); }
+    .astra-coach__bubble { position: fixed; max-width: 360px; padding: 12px 12px; border-radius: 14px; background: rgba(10,14,28,.88); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 18px 44px rgba(0,0,0,.45); color: rgba(255,255,255,.92); font-size: 13px; line-height: 1.35; pointer-events: auto; backdrop-filter: blur(10px); }
+    .astra-coach__title { font-weight: 800; font-size: 12px; opacity: .95; margin-bottom: 6px; display:flex; justify-content: space-between; gap: 8px; align-items: center; }
+    .astra-coach__close { width: 28px; height: 28px; border-radius: 10px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: rgba(255,255,255,.85); cursor: pointer; }
+    .astra-coach__close:hover { background: rgba(255,255,255,.10); }
+    .astra-coach__arrow { position: fixed; width: 14px; height: 14px; transform: rotate(45deg); background: rgba(10,14,28,.88); border-left: 1px solid rgba(255,255,255,.12); border-top: 1px solid rgba(255,255,255,.12); pointer-events: none; }
+    .astra-coach__footer { display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:10px; }
+    .astra-coach__dots { opacity:.75; font-size:12px; }
+
+    /* resaltado del objetivo */
+    .astra-coach--target {
+      outline: 2px solid rgba(255,255,255,.22);
+      box-shadow: 0 0 0 6px rgba(88,166,255,.10);
+      border-radius: 14px;
+    }
+  `;
+  document.head.appendChild(st);
+}
+
+function isAdminSafe() {
+  try {
+    if (typeof isAdmin === "function") return !!isAdmin();
+  } catch {}
+  // fallback por si no existe isAdmin()
+  const role = (window.ASTRA?.state?.user?.role || window.ASTRA?.state?.role || "").toLowerCase();
+  return role === "admin";
+}
+
+function isIESSafe() {
+  try {
+    if (typeof isIES === "function") return !!isIES();
+  } catch {}
+  // fallback: si no es admin, lo tratamos como IES
+  return !isAdminSafe();
+}
+
 function ensureCoach() {
   if (coach) return coach;
+
+  injectCoachStylesOnce();
 
   const root = document.createElement("div");
   root.className = "astra-coach";
@@ -240,10 +284,9 @@ function ensureCoach() {
 
     <div class="astra-coach__msg">…</div>
 
-    <div class="astra-coach__footer"
-         style="display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:10px;">
-      <button type="button" class="btn btn-outline-light btn-sm astra-coach__back">Atrás</button>
-      <div class="astra-coach__dots" style="opacity:.75; font-size:12px;">1/4</div>
+    <div class="astra-coach__footer">
+      <button type="button" class="btn btn-outline-light btn-sm astra-coach__back">Atras</button>
+      <div class="astra-coach__dots">1/4</div>
       <button type="button" class="btn btn-light btn-sm astra-coach__next">Siguiente</button>
     </div>
   `;
@@ -266,7 +309,6 @@ function ensureCoach() {
     dots: bubble.querySelector(".astra-coach__dots"),
     btnBack: bubble.querySelector(".astra-coach__back"),
     btnNext: bubble.querySelector(".astra-coach__next"),
-    _cleanup: null,
   };
 
   return coach;
@@ -297,22 +339,17 @@ function applyCoachTargetHighlight(targetEl) {
 
 function positionCoachToTarget(targetEl) {
   const c = ensureCoach();
-  if (!targetEl || typeof targetEl.getBoundingClientRect !== "function") return;
-
   const r = targetEl.getBoundingClientRect();
-
-  // si el elemento no está visible (0x0), no movemos nada
-  if (!r.width && !r.height) return;
 
   const tx = r.left + r.width * 0.65;
   const ty = r.top + r.height * 0.40;
 
-  // Astra mas "afuera" y grande
-  const ax = Math.max(140, tx - 260);
-  const ay = Math.min(window.innerHeight - 160, ty + 90);
+  // Astra mas afuera y grande
+  const ax = Math.max(160, tx - 300);
+  const ay = Math.min(window.innerHeight - 180, ty + 110);
 
-  // burbuja al lado del target
-  const bx = Math.min(window.innerWidth - 360, tx + 120);
+  // burbuja cerca del target
+  const bx = Math.min(window.innerWidth - 380, tx + 120);
   const by = Math.max(20, ty - 40);
 
   const arx = Math.min(window.innerWidth - 30, bx - 10);
@@ -328,18 +365,18 @@ function positionCoachToTarget(targetEl) {
   c.arrow.style.top = `${ary}px`;
 }
 
-function showCoach({ target, text, pose = "point", autoCloseMs = 0 } = {}) {
+function showCoach({ target, text, pose = "point", step = 1, total = 4, autoCloseMs = 0 } = {}) {
   if (!target) return;
 
   const c = ensureCoach();
   clearTimeout(coachTimer);
 
-  // evita fuga: limpia listeners anteriores antes de volver a setear
-  c._cleanup?.();
-  c._cleanup = null;
-
   setCoachPose(pose);
   c.msg.textContent = text || "";
+
+  c.dots.textContent = `${step}/${total}`;
+  c.btnBack.disabled = step <= 1;
+  c.btnNext.textContent = step >= total ? "Finalizar" : "Siguiente";
 
   c.root.style.display = "block";
 
@@ -383,6 +420,119 @@ function hideCoach(markDone = false) {
 function shouldAutoCoach() {
   try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
 }
+
+// -------------------- TOUR (4 PASOS) --------------------
+function getTourSteps() {
+  const total = 4;
+
+  // targets
+  const field = document.getElementById("subprogramasField");
+  const firstSubp = field?.querySelector(".subp-node");
+  const adminBar = document.getElementById("adminIesBar");
+  const iesSelect = document.getElementById("iesSelect");
+  const btnResumenGlobal = document.getElementById("btnResumenGlobal");
+  const btnVerResumen = document.getElementById("btnVerResumen");
+  const offcanvas = document.getElementById("submodsCanvas");
+
+  if (isAdminSafe()) {
+    return [
+      {
+        pose: "saludo",
+        text: "Hola 👋 Soy Astra. Te voy a guiar en 4 pasos rapidos.",
+        target: document.querySelector(".astra-brand") || field || document.body,
+      },
+      {
+        pose: "point",
+        text: "Paso 1: como Admin, primero selecciona una IES aqui para ver/gestionar su informacion.",
+        target: iesSelect || adminBar || field || document.body,
+      },
+      {
+        pose: "checklist",
+        text: "Paso 2: explora los subprogramas (constelacion). Al dar click se abre el panel de submodulos.",
+        target: firstSubp || field || document.body,
+      },
+      {
+        pose: "exit",
+        text: "Paso 3: desde el panel, entra a operativa o abre el resumen. (Tambien tienes 'Resumen general' arriba).",
+        target: btnVerResumen || offcanvas || btnResumenGlobal || field || document.body,
+      },
+    ];
+  }
+
+  // IES
+  return [
+    {
+      pose: "saludo",
+      text: "Hola 👋 Soy Astra. Bienvenido. Te muestro como usar ASTRA en 4 pasos.",
+      target: document.querySelector(".astra-brand") || field || document.body,
+    },
+    {
+      pose: "point",
+      text: "Paso 1: elige un subprograma en la constelacion para ver sus submodulos.",
+      target: firstSubp || field || document.body,
+    },
+    {
+      pose: "checklist",
+      text: "Paso 2: en el panel lateral selecciona un submodulo para abrir la operativa y registrar evidencias.",
+      target: offcanvas || document.body,
+    },
+    {
+      pose: "exit",
+      text: "Paso 3: cuando quieras, usa 'Ver resumen' para revisar el avance del submodulo.",
+      target: btnVerResumen || document.body,
+    },
+  ].map((s, i) => ({ ...s, _i: i + 1, _total: total }));
+}
+
+function renderTourStep() {
+  const steps = getTourSteps();
+  const total = steps.length;
+  const s = steps[Math.max(0, Math.min(coachStep, total - 1))];
+
+  showCoach({
+    target: s.target,
+    pose: s.pose,
+    text: s.text,
+    step: coachStep + 1,
+    total,
+  });
+}
+
+function tourStart() {
+  coachStep = 0;
+  renderTourStep();
+}
+
+function tourNext() {
+  const steps = getTourSteps();
+  if (coachStep >= steps.length - 1) {
+    hideCoach(true);
+    return;
+  }
+  coachStep += 1;
+  renderTourStep();
+}
+
+function tourPrev() {
+  if (coachStep <= 0) return;
+  coachStep -= 1;
+  renderTourStep();
+}
+
+// expone para boton "Guia" (admin + IES)
+A.openGuide = function () {
+  tourStart();
+};
+
+// auto-onboarding 1 vez
+document.addEventListener("DOMContentLoaded", () => {
+  if (shouldAutoCoach()) {
+    // pequeño delay para que ya existan nodos
+    setTimeout(() => {
+      try { tourStart(); } catch {}
+    }, 350);
+  }
+});
 
 // ============================================================
 // TOUR (4 pasos) — Admin + IES
