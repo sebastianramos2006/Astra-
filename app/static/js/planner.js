@@ -1399,245 +1399,275 @@ async function openOperativa(submodulo) {
     }
   }
 
-  // ============================================================
-  // Resumen general (Admin + IES)  (tu código igual, sin cambios críticos)
-  // ============================================================
-  function fmtDate(s) {
-    if (!s) return "—";
-    const d = String(s).slice(0, 10);
-    const [y, m, day] = d.split("-");
-    if (!y || !m || !day) return d;
-    return `${day}/${m}/${y}`;
-  }
+// ============================================================
+// Resumen general (Admin + IES)
+// ============================================================
+function fmtDate(s) {
+  if (!s) return "—";
+  const d = String(s).slice(0, 10);
+  const [y, m, day] = d.split("-");
+  if (!y || !m || !day) return d;
+  return `${day}/${m}/${y}`;
+}
 
-  function pickLastUpdated(registros = []) {
-    let best = null;
-    for (const r of registros) {
-      const u = r?.updated_at;
-      if (!u) continue;
-      const t = new Date(u).getTime();
-      if (!Number.isFinite(t)) continue;
-      if (best === null || t > best.t) best = { t, raw: u };
+function pickLastUpdated(registros = []) {
+  let best = null;
+  for (const r of registros) {
+    const u = r?.updated_at;
+    if (!u) continue;
+    const t = new Date(u).getTime();
+    if (!Number.isFinite(t)) continue;
+    if (best === null || t > best.t) best = { t, raw: u };
+  }
+  return best?.raw || null;
+}
+
+function pickResponsable(registros = []) {
+  for (const r of registros) {
+    const v = (r?.responsable ?? "").toString().trim();
+    if (v) return v;
+  }
+  return "—";
+}
+
+async function mapLimit(items, limit, mapper) {
+  const arr = Array.isArray(items) ? items : [];
+  if (!arr.length) return [];
+  const out = new Array(arr.length);
+  let cursor = 0;
+
+  const workers = Array.from({ length: Math.min(limit, arr.length) }, async () => {
+    while (true) {
+      const idx = cursor++;
+      if (idx >= arr.length) break;
+      out[idx] = await mapper(arr[idx], idx);
     }
-    return best?.raw || null;
-  }
+  });
 
-  function pickResponsable(registros = []) {
-    for (const r of registros) {
-      const v = (r?.responsable ?? "").toString().trim();
-      if (v) return v;
-    }
-    return "—";
-  }
+  await Promise.all(workers);
+  return out;
+}
 
-  async function mapLimit(items, limit, mapper) {
-    const out = new Array(items.length);
-    let cursor = 0;
-
-    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (true) {
-        const idx = cursor++;
-        if (idx >= items.length) break;
-        out[idx] = await mapper(items[idx], idx);
-      }
-    });
-
-    await Promise.all(workers);
-    return out;
-  }
-
-  function resumenGeneralShellHTML(iesNombre, iesId) {
-    return `
-      <div class="container-fluid mt-3">
-        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
-          <div>
-            <div class="text-secondary small">RESUMEN GENERAL</div>
-            <h4 class="mb-1">Subprogramas · Submódulos</h4>
-            <div class="text-secondary small">IES: ${escapeHtml(iesNombre)} ${iesId ? `· ID: ${escapeHtml(String(iesId))}` : ""}</div>
-          </div>
-          <div class="d-flex gap-2">
-            <button id="btnBackRG" class="btn btn-outline-light btn-sm">${isIES() ? "Volver al mapa" : "Volver"}</button>
+function resumenGeneralShellHTML(iesNombre, iesId) {
+  return `
+    <div class="container-fluid mt-3">
+      <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+        <div>
+          <div class="text-secondary small">RESUMEN GENERAL</div>
+          <h4 class="mb-1">Subprogramas · Submódulos</h4>
+          <div class="text-secondary small">
+            IES: ${escapeHtml(iesNombre)}
+            ${iesId ? `· ID: ${escapeHtml(String(iesId))}` : ""}
           </div>
         </div>
-
-        <div id="rgProgress" class="text-secondary small mt-3">Cargando…</div>
-
-        <div class="table-responsive mt-3">
-          <table class="table table-dark table-sm align-middle">
-            <thead>
-              <tr>
-                <th style="min-width:260px;">Subprograma</th>
-                <th style="min-width:320px;">Submódulo</th>
-                <th style="min-width:190px;">Responsable</th>
-                <th class="text-end" style="min-width:110px;">Evidencias</th>
-                <th class="text-end" style="min-width:90px;">Avance</th>
-                <th style="min-width:150px;">Últ. actualización</th>
-                <th style="min-width:110px;"></th>
-              </tr>
-            </thead>
-            <tbody id="rgTbody">
-              <tr><td colspan="7" class="text-secondary">Cargando…</td></tr>
-            </tbody>
-          </table>
-        </div>
-
-        <div class="text-secondary small mt-2">
-          Abre un submódulo con <b>Ver</b> para revisar su resumen completo.
+        <div class="d-flex gap-2">
+          <button id="btnBackRG" class="btn btn-outline-light btn-sm">
+            ${isIES() ? "Volver al mapa" : "Volver"}
+          </button>
         </div>
       </div>
-    `;
+
+      <div id="rgProgress" class="text-secondary small mt-3">Cargando…</div>
+
+      <div class="table-responsive mt-3">
+        <table class="table table-dark table-sm align-middle">
+          <thead>
+            <tr>
+              <th style="min-width:260px;">Subprograma</th>
+              <th style="min-width:320px;">Submódulo</th>
+              <th style="min-width:190px;">Responsable</th>
+              <th class="text-end" style="min-width:110px;">Evidencias</th>
+              <th class="text-end" style="min-width:90px;">Avance</th>
+              <th style="min-width:150px;">Últ. actualización</th>
+              <th style="min-width:110px;"></th>
+            </tr>
+          </thead>
+          <tbody id="rgTbody">
+            <tr><td colspan="7" class="text-secondary">Cargando…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="text-secondary small mt-2">
+        Abre un submódulo con <b>Ver</b> para revisar su resumen completo.
+      </div>
+    </div>
+  `;
+}
+
+async function openResumenGeneral() {
+  hideCoach(true);
+
+  if (!resumenPanel) return;
+
+  // Admin necesita IES seleccionada
+  if (isAdminLocked()) {
+    toastCompat({
+      type: "warning",
+      title: "Falta IES",
+      msg: "Selecciona una IES para abrir el Resumen general.",
+      ms: 4200,
+    });
+    showAdminGateIfNeeded();
+    return;
   }
 
-  async function openResumenGeneral() {
-    hideCoach(true);
+  const iesNombre = A.state.ies?.nombre || A.state.ies?.slug || "—";
+  const iesId = A.state.ies?.id || null;
 
-    if (!resumenPanel) return;
+  showOnly("resumen");
+  forceCloseSubmodsDrawer();
+  setHidden(resumenPanel, false);
 
-    if (isAdminLocked()) {
-      toastCompat ({ type: "warning", title: "Falta IES", msg: "Selecciona una IES para abrir el Resumen general.", ms: 4200 });
-      showAdminGateIfNeeded();
+  resumenPanel.innerHTML = resumenGeneralShellHTML(iesNombre, iesId);
+
+  document.getElementById("btnBackRG")?.addEventListener("click", () => {
+    // IES vuelve al home mapa, Admin vuelve al home (con selector)
+    showOnly("home");
+  });
+
+  const rgProgress = document.getElementById("rgProgress");
+  const rgTbody = document.getElementById("rgTbody");
+
+  try {
+    if (rgProgress) rgProgress.textContent = "Cargando catálogo de subprogramas…";
+    const subprogramas = await A.api("/catalogo/subprogramas");
+    const sps = Array.isArray(subprogramas) ? subprogramas : [];
+
+    if (!sps.length) {
+      if (rgTbody) rgTbody.innerHTML = `<tr><td colspan="7" class="text-secondary">No hay subprogramas.</td></tr>`;
+      if (rgProgress) rgProgress.textContent = "Listo.";
       return;
     }
 
-    const iesNombre = A.state.ies?.nombre || A.state.ies?.slug || "—";
-    const iesId = A.state.ies?.id || null;
+    if (rgProgress) rgProgress.textContent = "Cargando submódulos…";
+    const rows = [];
 
-    showOnly("resumen");
-    forceCloseSubmodsDrawer();
-    setHidden(resumenPanel, false);
+    for (const sp of sps) {
+      const spId = sp?.id;
+      const spName = sp?.nombre || `Subprograma ${spId}`;
+      if (!spId) continue;
 
-    resumenPanel.innerHTML = resumenGeneralShellHTML(iesNombre, iesId);
-    document.getElementById("btnBackRG")?.addEventListener("click", () => {
-      showOnly("home");
+      const sms = await A.api(`/catalogo/subprogramas/${spId}/submodulos`);
+      const list = Array.isArray(sms) ? sms : [];
+
+      for (const sm of list) {
+        if (!sm?.id) continue;
+        rows.push({
+          spId,
+          spName,
+          smId: sm.id,
+          smName: sm.nombre || `Submódulo ${sm.id}`,
+        });
+      }
+    }
+
+    if (!rows.length) {
+      if (rgTbody) rgTbody.innerHTML = `<tr><td colspan="7" class="text-secondary">No hay submódulos.</td></tr>`;
+      if (rgProgress) rgProgress.textContent = "Listo.";
+      return;
+    }
+
+    let done = 0;
+    if (rgProgress) rgProgress.textContent = `Cargando resúmenes: 0/${rows.length}…`;
+
+    const results = await mapLimit(rows, 4, async (row) => {
+      try {
+        const data = await fetchResumenSubmodulo(row.smId);
+        return { ok: true, row, data };
+      } catch (e) {
+        console.error("Resumen submódulo falló:", row.smId, e);
+        return { ok: false, row, err: e };
+      } finally {
+        done++;
+        if (rgProgress) rgProgress.textContent = `Cargando resúmenes: ${done}/${rows.length}…`;
+      }
     });
 
-    const rgProgress = document.getElementById("rgProgress");
-    const rgTbody = document.getElementById("rgTbody");
+    if (rgProgress) rgProgress.textContent = `Listo ✓ (${rows.length} submódulos)`;
 
-    try {
-      if (rgProgress) rgProgress.textContent = "Cargando catálogo de subprogramas…";
-      const subprogramas = await A.api("/catalogo/subprogramas");
-      const sps = Array.isArray(subprogramas) ? subprogramas : [];
+    if (rgTbody) {
+      rgTbody.innerHTML = results
+        .map((r) => {
+          const sp = escapeHtml(r.row.spName);
+          const sm = escapeHtml(r.row.smName);
 
-      if (!sps.length) {
-        if (rgTbody) rgTbody.innerHTML = `<tr><td colspan="7" class="text-secondary">No hay subprogramas.</td></tr>`;
-        if (rgProgress) rgProgress.textContent = "Listo.";
-        return;
-      }
-
-      if (rgProgress) rgProgress.textContent = "Cargando submódulos…";
-      const rows = [];
-
-      for (const sp of sps) {
-        const spId = sp?.id;
-        const spName = sp?.nombre || `Subprograma ${spId}`;
-        if (!spId) continue;
-
-        const sms = await A.api(`/catalogo/subprogramas/${spId}/submodulos`);
-        const list = Array.isArray(sms) ? sms : [];
-
-        for (const sm of list) {
-          if (!sm?.id) continue;
-          rows.push({ spId, spName, smId: sm.id, smName: sm.nombre || `Submódulo ${sm.id}` });
-        }
-      }
-
-      if (!rows.length) {
-        if (rgTbody) rgTbody.innerHTML = `<tr><td colspan="7" class="text-secondary">No hay submódulos.</td></tr>`;
-        if (rgProgress) rgProgress.textContent = "Listo.";
-        return;
-      }
-
-      let done = 0;
-      if (rgProgress) rgProgress.textContent = `Cargando resúmenes: 0/${rows.length}…`;
-
-      const results = await mapLimit(rows, 4, async (row) => {
-        try {
-          const data = await fetchResumenSubmodulo(row.smId);
-          return { ok: true, row, data };
-        } catch (e) {
-          console.error("Resumen submódulo falló:", row.smId, e);
-          return { ok: false, row, err: e };
-        } finally {
-          done++;
-          if (rgProgress) rgProgress.textContent = `Cargando resúmenes: ${done}/${rows.length}…`;
-        }
-      });
-
-      if (rgProgress) rgProgress.textContent = `Listo ✓ (${rows.length} submódulos)`;
-
-      if (rgTbody) {
-        rgTbody.innerHTML = results
-          .map((r) => {
-            const sp = escapeHtml(r.row.spName);
-            const sm = escapeHtml(r.row.smName);
-
-            if (!r.ok) {
-              return `
-                <tr>
-                  <td style="opacity:.85;">${sp}</td>
-                  <td style="font-weight:700;">${sm}</td>
-                  <td class="text-secondary small">—</td>
-                  <td class="text-end">0</td>
-                  <td class="text-end">0%</td>
-                  <td class="text-secondary small">—</td>
-                  <td class="text-end">
-                    <button class="btn btn-outline-light btn-sm rg-open" data-smid="${r.row.smId}">Ver</button>
-                  </td>
-                </tr>
-              `;
-            }
-
-            const data = r.data || {};
-            const registros = Array.isArray(data?.registros) ? data.registros : [];
-
-            const responsable = pickResponsable(registros);
-            const evid = Number(data?.evidencias_total ?? 0);
-            const av = Math.max(0, Math.min(100, Number(data?.avance_promedio ?? 0)));
-            const lastUpd = fmtDate(pickLastUpdated(registros));
-
+          // si falló, igual dejamos botón "Ver"
+          if (!r.ok) {
             return `
               <tr>
                 <td style="opacity:.85;">${sp}</td>
                 <td style="font-weight:700;">${sm}</td>
-                <td class="text-secondary small">${escapeHtml(responsable)}</td>
-                <td class="text-end">${evid}</td>
-                <td class="text-end">${Math.round(av)}%</td>
-                <td class="text-secondary small">${escapeHtml(lastUpd)}</td>
+                <td class="text-secondary small">—</td>
+                <td class="text-end">0</td>
+                <td class="text-end">0%</td>
+                <td class="text-secondary small">—</td>
                 <td class="text-end">
                   <button class="btn btn-outline-light btn-sm rg-open" data-smid="${r.row.smId}">Ver</button>
                 </td>
               </tr>
             `;
-          })
-          .join("");
+          }
 
-        rgTbody.onclick = async (ev) => {
-          const btn = ev.target.closest(".rg-open");
-          if (!btn) return;
+          const data = r.data || {};
+          const registros = Array.isArray(data?.registros) ? data.registros : [];
 
-          const smId = Number(btn.dataset.smid);
-          const sm = rows.find((x) => x.smId === smId);
-          if (!sm) return;
+          const responsable =
+            (data?.responsable_mas_reciente || "").toString().trim() ||
+            pickResponsable(registros);
 
-          await openResumenFromPlanner({ id: sm.smId, nombre: sm.smName });
-        };
-      }
-    } catch (e) {
-      console.error(e);
-      toastHttpError(e, "No se pudo construir el resumen general");
-      if (rgTbody) {
-        rgTbody.innerHTML = `
-          <tr>
-            <td colspan="7" class="text-danger small">
-              No se pudo construir el resumen general.
-            </td>
-          </tr>
-        `;
-      }
-      if (rgProgress) rgProgress.textContent = "Error.";
+          const evid = Number(data?.evidencias_total ?? 0);
+          const av = Math.max(0, Math.min(100, Number(data?.avance_promedio ?? 0)));
+
+          const lastUpdRaw =
+            data?.last_updated ||
+            data?.ultima_actualizacion ||
+            pickLastUpdated(registros);
+
+          const lastUpd = fmtDate(lastUpdRaw);
+
+          return `
+            <tr>
+              <td style="opacity:.85;">${sp}</td>
+              <td style="font-weight:700;">${sm}</td>
+              <td class="text-secondary small">${escapeHtml(responsable || "—")}</td>
+              <td class="text-end">${Number.isFinite(evid) ? evid : 0}</td>
+              <td class="text-end">${Math.round(Number.isFinite(av) ? av : 0)}%</td>
+              <td class="text-secondary small">${escapeHtml(lastUpd)}</td>
+              <td class="text-end">
+                <button class="btn btn-outline-light btn-sm rg-open" data-smid="${r.row.smId}">Ver</button>
+              </td>
+            </tr>
+          `;
+        })
+        .join("");
+
+      rgTbody.onclick = async (ev) => {
+        const btn = ev.target.closest(".rg-open");
+        if (!btn) return;
+
+        const smId = Number(btn.dataset.smid);
+        const sm = rows.find((x) => x.smId === smId);
+        if (!sm) return;
+
+        await openResumenFromPlanner({ id: sm.smId, nombre: sm.smName });
+      };
     }
+  } catch (e) {
+    console.error(e);
+    toastHttpError(e, "No se pudo construir el resumen general");
+    if (rgTbody) {
+      rgTbody.innerHTML = `
+        <tr>
+          <td colspan="7" class="text-danger small">
+            No se pudo construir el resumen general.
+          </td>
+        </tr>
+      `;
+    }
+    if (rgProgress) rgProgress.textContent = "Error.";
   }
+}
 
   // ============================================================
   // Events (map + drawer) — SOLO IES

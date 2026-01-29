@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from datetime import date
+from datetime import date, datetime
 
 from app.db.session import get_db
 from app.core.deps import require_admin, require_ies_user
@@ -40,12 +40,45 @@ def _bool_or_none(x):
     return None
 
 
+# ============================
+# UPDATED_AT robust parser
+# ============================
+def _parse_dt(u):
+    """
+    Soporta:
+    - datetime (ideal)
+    - string ISO (ej: '2026-01-29T12:34:56', '2026-01-29 12:34:56', con/ sin Z)
+    """
+    if u is None:
+        return None
+
+    # ya es datetime
+    if hasattr(u, "timestamp"):
+        return u
+
+    # string
+    if isinstance(u, str):
+        s = u.strip()
+        if not s:
+            return None
+        try:
+            # 'Z' -> UTC offset
+            s = s.replace("Z", "+00:00")
+            return datetime.fromisoformat(s)
+        except Exception:
+            # intento extra: si viene con microsegundos raros o formato no ISO,
+            # aquí preferimos fallar silenciosamente para no romper
+            return None
+
+    return None
+
+
 def _pick_responsable_mas_reciente(rows):
     """
     Escoge el responsable del registro con updated_at más reciente.
-    Si no hay updated_at, intenta caer al último con responsable no vacío.
+    Si no puede parsear updated_at, cae al último responsable no vacío.
     """
-    best = None  # (ts, responsable)
+    best = None  # (datetime, responsable)
     last_non_empty = None
 
     for r in rows:
@@ -53,20 +86,12 @@ def _pick_responsable_mas_reciente(rows):
         if resp:
             last_non_empty = resp
 
-        u = r.get("updated_at")
+        u = _parse_dt(r.get("updated_at"))
         if not u or not resp:
             continue
 
-        try:
-            ts = u.timestamp() if hasattr(u, "timestamp") else None
-        except Exception:
-            ts = None
-
-        if ts is None:
-            continue
-
-        if best is None or ts > best[0]:
-            best = (ts, resp)
+        if best is None or u > best[0]:
+            best = (u, resp)
 
     return best[1] if best else last_non_empty
 
@@ -237,8 +262,6 @@ def resumen_submodulo_mio(
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_ies_user),
 ):
-    # require_ies_user ya valida que sea cliente/ies
-    # aqui aseguramos que solo use su ies_id
     if not user or not getattr(user, "ies_id", None):
         raise HTTPException(status_code=401, detail="Usuario IES sin ies_id válido.")
     return _run_resumen(int(user.ies_id), submodulo_id, db)
