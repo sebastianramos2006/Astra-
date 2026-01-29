@@ -89,9 +89,6 @@
 
   // --------------------------
   // ✅ Session context (IES) — robust (NO /auth/me)
-  // - Evita 404 de /auth/me
-  // - Deriva ies_slug desde el JWT (si existe)
-  // - Mantiene compatibilidad con planner.js y módulos viejos vía localStorage
   // --------------------------
   function pickIesSlugFromPayload(p) {
     const slug =
@@ -134,7 +131,6 @@
     const p = A.parseJwt(token) || null;
     const rol = A.getRole(); // admin | ies
 
-    // Guardar rol siempre
     const ies_slug = rol === "ies" ? pickIesSlugFromPayload(p || {}) : "";
     const ies_id = rol === "ies" ? pickIesIdFromPayload(p || {}) : null;
 
@@ -272,16 +268,6 @@
     }
   }
 
-  /**
-   * A.toast({
-   *   type: "success" | "info" | "warn" | "error",
-   *   title: string,
-   *   message: string,
-   *   timeout: ms (default 5200), // sticky=true no se cierra solo
-   *   sticky: boolean,
-   *   actions: [{ label, onClick }]
-   * })
-   */
   A.toast = function ({
     type = "info",
     title = "ASTRA",
@@ -335,7 +321,6 @@
     return { close };
   };
 
-  // helper: toast credenciales con copiar
   A.toastCreds = function ({ email, password, title = "Credenciales provisionales" } = {}) {
     const msg = `${email ? "Email: " + email : ""}${email && password ? "\n" : ""}${
       password ? "Clave: " + password : ""
@@ -408,25 +393,67 @@
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
-    // Si hay token, sincronizamos sesión (sin molestar en /login)
     if (!location.pathname.includes("/login")) {
       const t = A.auth.get();
       if (t && String(t).split(".").length === 3) {
-        await A.refreshSession(); // ✅ ahora NO genera 404
+        await A.refreshSession();
         welcomeOnce();
       }
     }
   });
 
   // --------------------------
-  // API wrapper (mejorado)
-  // - conserva tu interfaz
-  // - agrega status en el error
+  // ✅ API wrapper (ARREGLADO)
+  // - Soporta:
+  //    A.api("/x")                        -> GET
+  //    A.api("/x", data)                  -> POST + JSON
+  //    A.api("/x", data, {method:"PATCH"})-> PATCH + JSON
+  //    A.api("/x", {method:"GET"})        -> GET (modo fetch opts)
   // --------------------------
-  A.api = async function (path, opts = {}) {
+  A.api = async function (path, a = undefined, b = undefined) {
     const token = A.auth.get();
 
-    const isFormData = typeof FormData !== "undefined" && opts.body instanceof FormData;
+    const looksLikeFetchOpts = (obj) => {
+      if (!obj || typeof obj !== "object") return false;
+      const keys = Object.keys(obj);
+      const hintKeys = new Set([
+        "method",
+        "headers",
+        "body",
+        "mode",
+        "cache",
+        "credentials",
+        "redirect",
+        "referrer",
+        "referrerPolicy",
+        "integrity",
+        "keepalive",
+        "signal",
+      ]);
+      return keys.some((k) => hintKeys.has(k));
+    };
+
+    let data = null;
+    let opts = {};
+
+    if (b !== undefined) {
+      // A.api(path, data, opts)
+      data = a ?? null;
+      opts = b ?? {};
+    } else if (looksLikeFetchOpts(a)) {
+      // A.api(path, opts)
+      data = null;
+      opts = a ?? {};
+    } else {
+      // A.api(path, data)
+      data = a ?? null;
+      opts = {};
+    }
+
+    const method = (opts.method || (data ? "POST" : "GET")).toString().toUpperCase();
+
+    const isFormData =
+      typeof FormData !== "undefined" && (data instanceof FormData || opts.body instanceof FormData);
 
     const headers = Object.assign(
       isFormData ? {} : { "Content-Type": "application/json" },
@@ -434,7 +461,18 @@
       token ? { Authorization: `Bearer ${token}` } : {}
     );
 
-    const res = await fetch(path, { ...opts, headers });
+    let body = opts.body;
+
+    if (body === undefined && data !== null && method !== "GET" && method !== "HEAD") {
+      body = isFormData ? data : JSON.stringify(data);
+    }
+
+    const res = await fetch(path, {
+      ...opts,
+      method,
+      headers,
+      body: method === "GET" || method === "HEAD" ? undefined : body,
+    });
 
     const ct = res.headers.get("content-type") || "";
     const readBody = async () => {
@@ -446,19 +484,23 @@
       }
     };
 
-    const body = await readBody();
+    const out = await readBody();
 
     if (!res.ok) {
       const msg =
-        (typeof body === "string" && body) ||
-        (body?.detail ? (typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail)) : "") ||
+        (typeof out === "string" && out) ||
+        (out?.detail
+          ? typeof out.detail === "string"
+            ? out.detail
+            : JSON.stringify(out.detail)
+          : "") ||
         `HTTP ${res.status} ${res.statusText}`;
       const err = new Error(msg);
       err.status = res.status;
-      err.body = body;
+      err.body = out;
       throw err;
     }
 
-    return body;
+    return out;
   };
 })();

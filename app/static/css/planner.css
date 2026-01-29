@@ -320,13 +320,14 @@
 
 /* ---------- Toasts ----------
    ✅ Eliminado: estilos duplicados de toast (ya están en index)
-   Razón: tenías .astra-toasts / .astra-toast duplicados (left/bottom en index y right/bottom aquí).
-   Eso genera posiciones raras y “parpadeos”.
 */
 
 /* =========================================================
    ✅ COACH NUEVO (planner.js)
-   - Ajustes únicos aquí (sin duplicar reglas)
+   FIXES:
+   1) img/bubble/arrow ahora SON posicionables (position:fixed)
+   2) textos largos NO crecen infinito (scroll interno)
+   3) tamaño consistente (como tu 1ra imagen)
 ========================================================= */
 
 .astra-coach{
@@ -335,6 +336,15 @@
   z-index: 9999 !important;
   pointer-events: none;
   background: rgba(0,0,0,.28);
+}
+
+/* 🔥 IMPORTANTE: sin esto, left/top NO aplica y se desordena todo */
+.astra-coach__img,
+.astra-coach__bubble,
+.astra-coach__arrow{
+  position: fixed !important;
+  left: 0;
+  top: 0;
 }
 
 .astra-coach--target{
@@ -352,31 +362,65 @@
   height: auto !important;
   filter: drop-shadow(0 16px 34px rgba(0,0,0,.55)) !important;
   pointer-events: none !important;
+  z-index: 1; /* atrás de la burbuja */
 }
 
 .astra-coach__bubble{
+  width: 320px !important;      /* tamaño estable */
   max-width: 320px !important;
+  max-height: 230px !important; /* evita que “tape” la imagen */
+  overflow: hidden !important;  /* el scroll lo maneja el msg */
+
   padding: 10px 12px !important;
   border-radius: 16px !important;
   background: rgba(10,14,28,.88) !important;
   border: 1px solid rgba(255,255,255,.12) !important;
   box-shadow: 0 18px 44px rgba(0,0,0,.45) !important;
   color: rgba(235,240,255,.92) !important;
+
   font-size: 13px !important;
   line-height: 1.35 !important;
   pointer-events: auto !important;
   backdrop-filter: blur(10px) !important;
+
+  z-index: 3; /* encima de la imagen */
 }
 
 .astra-coach__title{
   font-weight: 900 !important;
   font-size: 12px !important;
   opacity: .96 !important;
-  margin-bottom: 4px !important;
+  margin-bottom: 6px !important;
   display:flex !important;
   justify-content: space-between !important;
   gap: 8px !important;
   align-items: center !important;
+}
+
+.astra-coach__msg{
+  font-size: 13px !important;
+  line-height: 1.35 !important;
+  margin: 0 !important;
+
+  /* evita que el texto se coma todo */
+  max-height: 120px !important;
+  overflow-y: auto !important;
+  padding-right: 6px !important;
+
+  /* rompe palabras largas/URLs */
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+
+/* scroll bonito sin romper nada */
+.astra-coach__msg::-webkit-scrollbar{ width: 8px; }
+.astra-coach__msg::-webkit-scrollbar-thumb{
+  background: rgba(255,255,255,.12);
+  border-radius: 999px;
+}
+.astra-coach__msg::-webkit-scrollbar-track{
+  background: rgba(255,255,255,.04);
+  border-radius: 999px;
 }
 
 .astra-coach__close{
@@ -387,6 +431,7 @@
   background: rgba(255,255,255,.06) !important;
   color: rgba(255,255,255,.90) !important;
   cursor: pointer !important;
+  flex: 0 0 auto !important;
 }
 .astra-coach__close:hover{ background: rgba(255,255,255,.10) !important; }
 
@@ -398,11 +443,17 @@
   border-left: 1px solid rgba(255,255,255,.12) !important;
   border-top: 1px solid rgba(255,255,255,.12) !important;
   pointer-events: none !important;
+  z-index: 2;
 }
 
 @media (max-width: 520px){
   .astra-coach__img{ width: 220px !important; }
-  .astra-coach__bubble{ max-width: 290px !important; }
+  .astra-coach__bubble{
+    width: 290px !important;
+    max-width: 290px !important;
+    max-height: 240px !important;
+  }
+  .astra-coach__msg{ max-height: 135px !important; }
 }
 
 @media (prefers-reduced-motion: reduce){
