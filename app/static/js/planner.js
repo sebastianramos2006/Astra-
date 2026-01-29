@@ -205,159 +205,142 @@ function toastCompat({
   const constellation = document.querySelector(".constellation");
 
   // ============================================================
-  //  Coach Astra (igual que tu versión)
-  // ============================================================
-  const COACH_KEY = "astra_onboarding_v1_done";
-  let coach = null;
+//  Coach Astra (igual que tu versión)
+// ============================================================
+const COACH_KEY = "astra_onboarding_v1_done";
+let coach = null;
 
-  function injectCoachStylesOnce() {
-    if (document.getElementById("astraCoachStyles")) return;
-    const st = document.createElement("style");
-    st.id = "astraCoachStyles";
-    st.textContent = `
-      .astra-coach { position: fixed; inset: 0; z-index: 9999; pointer-events: none; }
-      .astra-coach__img { position: fixed; width: 220px; height: auto; filter: drop-shadow(0 12px 28px rgba(0,0,0,.55)); pointer-events: none; transform: translate(-50%, -50%); }
-      .astra-coach__bubble { position: fixed; max-width: 320px; padding: 12px 12px; border-radius: 12px; background: rgba(10,14,28,.86); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 18px 44px rgba(0,0,0,.45); color: rgba(255,255,255,.92); font-size: 13px; line-height: 1.35; pointer-events: auto; backdrop-filter: blur(10px); }
-      .astra-coach__title { font-weight: 800; font-size: 12px; opacity: .95; margin-bottom: 4px; display:flex; justify-content: space-between; gap: 8px; align-items: center; }
-      .astra-coach__close { width: 28px; height: 28px; border-radius: 10px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: rgba(255,255,255,.85); cursor: pointer; }
-      .astra-coach__close:hover { background: rgba(255,255,255,.10); }
-      .astra-coach__arrow { position: fixed; width: 14px; height: 14px; transform: rotate(45deg); background: rgba(10,14,28,.86); border-left: 1px solid rgba(255,255,255,.12); border-top: 1px solid rgba(255,255,255,.12); pointer-events: none; }
-    `;
-    document.head.appendChild(st);
-  }
+function ensureCoach() {
+  if (coach) return coach;
 
-  function ensureCoach() {
-    if (coach) return coach;
-    injectCoachStylesOnce();
+  const root = document.createElement("div");
+  root.className = "astra-coach";
+  root.style.display = "none";
 
-    const root = document.createElement("div");
-    root.className = "astra-coach";
-    root.style.display = "none";
+  const img = document.createElement("img");
+  img.className = "astra-coach__img";
+  img.src = "/static/img/astra_point.png";
+  img.onerror = () => (img.src = "/static/img/astra.png");
+  img.alt = "Astra";
 
-    const img = document.createElement("img");
-    img.className = "astra-coach__img";
-    img.src = "/static/img/astra_point.png";
-    img.onerror = () => (img.src = "/static/img/astra.png");
-    img.alt = "Astra";
+  const bubble = document.createElement("div");
+  bubble.className = "astra-coach__bubble";
 
-    const bubble = document.createElement("div");
-    bubble.className = "astra-coach__bubble";
+  const arrow = document.createElement("div");
+  arrow.className = "astra-coach__arrow";
 
-    const arrow = document.createElement("div");
-    arrow.className = "astra-coach__arrow";
+  bubble.innerHTML = `
+    <div class="astra-coach__title">
+      <span>Astra</span>
+      <button class="astra-coach__close" title="Cerrar">×</button>
+    </div>
+    <div class="astra-coach__msg">…</div>
+  `;
 
-    bubble.innerHTML = `
-      <div class="astra-coach__title">
-        <span>Astra</span>
-        <button class="astra-coach__close" title="Cerrar">×</button>
-      </div>
-      <div class="astra-coach__msg">…</div>
-    `;
+  bubble.querySelector(".astra-coach__close")?.addEventListener("click", () => hideCoach(true));
 
-    bubble.querySelector(".astra-coach__close")?.addEventListener("click", () => hideCoach(true));
+  root.appendChild(img);
+  root.appendChild(arrow);
+  root.appendChild(bubble);
+  document.body.appendChild(root);
 
-    root.appendChild(img);
-    root.appendChild(arrow);
-    root.appendChild(bubble);
-    document.body.appendChild(root);
+  coach = { root, img, bubble, arrow, msg: bubble.querySelector(".astra-coach__msg") };
+  return coach;
+}
 
-    coach = { root, img, bubble, arrow, msg: bubble.querySelector(".astra-coach__msg") };
-    return coach;
-  }
-
-  function setCoachContent({ text, pose = "point" } = {}) {
-    const c = ensureCoach();
-    const mapPose = {
-      saludo: "/static/img/astra_saludo.png",
-      point: "/static/img/astra_point.png",
-      stats: "/static/img/astra_stats.png",
-      exit: "/static/img/astra_exit.png",
-    };
-    c.img.src = mapPose[pose] || mapPose.point;
-    c.msg.textContent = text || "";
-  }
-
-  function positionCoachToTarget(targetEl) {
-    const c = ensureCoach();
-    const r = targetEl.getBoundingClientRect();
-
-    const tx = r.left + r.width * 0.65;
-    const ty = r.top + r.height * 0.40;
-
-    const ax = Math.max(120, tx - 190);
-    const ay = Math.min(window.innerHeight - 140, ty + 80);
-
-    const bx = Math.min(window.innerWidth - 360, tx + 120);
-    const by = Math.max(20, ty - 40);
-
-    const arx = Math.min(window.innerWidth - 30, bx - 10);
-    const ary = Math.max(20, by + 18);
-
-    c.img.style.left = `${ax}px`;
-    c.img.style.top = `${ay}px`;
-
-    c.bubble.style.left = `${bx}px`;
-    c.bubble.style.top = `${by}px`;
-
-    c.arrow.style.left = `${arx}px`;
-    c.arrow.style.top = `${ary}px`;
-  }
-
-  let coachTimer = null;
-  function showCoach({ target, text, pose = "point", autoCloseMs = 0 } = {}) {
-    if (!target) return;
-    const c = ensureCoach();
-    clearTimeout(coachTimer);
-
-    setCoachContent({ text, pose });
-    positionCoachToTarget(target);
-
-    c.root.style.display = "block";
-
-    const onMove = () => {
-      if (c.root.style.display !== "block") return;
-      positionCoachToTarget(target);
-    };
-    window.addEventListener("resize", onMove, { passive: true });
-    window.addEventListener("scroll", onMove, { passive: true });
-
-    c._cleanup = () => {
-      window.removeEventListener("resize", onMove);
-      window.removeEventListener("scroll", onMove);
-    };
-
-    if (autoCloseMs && autoCloseMs > 0) {
-      coachTimer = setTimeout(() => hideCoach(false), autoCloseMs);
-    }
-  }
-
-  function hideCoach(markDone = false) {
-    if (!coach) return;
-    clearTimeout(coachTimer);
-    coach.root.style.display = "none";
-    coach._cleanup?.();
-    coach._cleanup = null;
-    if (markDone) {
-      try { localStorage.setItem(COACH_KEY, "1"); } catch {}
-    }
-  }
-
-  function shouldAutoCoach() {
-    try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
-  }
-
-  // expone para botón "Guía"
-  A.openGuide = function () {
-    if (!isIES()) return;
-    const first = field?.querySelector(".subp-node");
-    if (!first) return;
-    showCoach({
-      target: first,
-      pose: "saludo",
-      text: "Elige un subprograma para ver sus submódulos. Luego abre un submódulo y registra evidencias.",
-      autoCloseMs: 0,
-    });
+function setCoachContent({ text, pose = "point" } = {}) {
+  const c = ensureCoach();
+  const mapPose = {
+    saludo: "/static/img/astra_saludo.png",
+    point: "/static/img/astra_point.png",
+    stats: "/static/img/astra_stats.png",
+    exit: "/static/img/astra_exit.png",
   };
+  c.img.src = mapPose[pose] || mapPose.point;
+  c.msg.textContent = text || "";
+}
+
+function positionCoachToTarget(targetEl) {
+  const c = ensureCoach();
+  const r = targetEl.getBoundingClientRect();
+
+  const tx = r.left + r.width * 0.65;
+  const ty = r.top + r.height * 0.40;
+
+  const ax = Math.max(120, tx - 190);
+  const ay = Math.min(window.innerHeight - 140, ty + 80);
+
+  const bx = Math.min(window.innerWidth - 360, tx + 120);
+  const by = Math.max(20, ty - 40);
+
+  const arx = Math.min(window.innerWidth - 30, bx - 10);
+  const ary = Math.max(20, by + 18);
+
+  c.img.style.left = `${ax}px`;
+  c.img.style.top = `${ay}px`;
+
+  c.bubble.style.left = `${bx}px`;
+  c.bubble.style.top = `${by}px`;
+
+  c.arrow.style.left = `${arx}px`;
+  c.arrow.style.top = `${ary}px`;
+}
+
+let coachTimer = null;
+function showCoach({ target, text, pose = "point", autoCloseMs = 0 } = {}) {
+  if (!target) return;
+  const c = ensureCoach();
+  clearTimeout(coachTimer);
+
+  setCoachContent({ text, pose });
+  positionCoachToTarget(target);
+
+  c.root.style.display = "block";
+
+  const onMove = () => {
+    if (c.root.style.display !== "block") return;
+    positionCoachToTarget(target);
+  };
+  window.addEventListener("resize", onMove, { passive: true });
+  window.addEventListener("scroll", onMove, { passive: true });
+
+  c._cleanup = () => {
+    window.removeEventListener("resize", onMove);
+    window.removeEventListener("scroll", onMove);
+  };
+
+  if (autoCloseMs && autoCloseMs > 0) {
+    coachTimer = setTimeout(() => hideCoach(false), autoCloseMs);
+  }
+}
+
+function hideCoach(markDone = false) {
+  if (!coach) return;
+  clearTimeout(coachTimer);
+  coach.root.style.display = "none";
+  coach._cleanup?.();
+  coach._cleanup = null;
+  if (markDone) {
+    try { localStorage.setItem(COACH_KEY, "1"); } catch {}
+  }
+}
+
+function shouldAutoCoach() {
+  try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
+}
+
+// expone para botón "Guía"
+A.openGuide = function () {
+  if (!isIES()) return;
+  const first = field?.querySelector(".subp-node");
+  if (!first) return;
+  showCoach({
+    target: first,
+    pose: "saludo",
+    text: "Elige un subprograma para ver sus submódulos. Luego abre un submódulo y registra evidencias.",
+    autoCloseMs: 0,
+  });
+};
 
   // ============================================================
   // Logout

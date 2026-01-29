@@ -64,7 +64,7 @@
   margin: 0 auto;
   padding: 46px 56px;
 
-  /* ✅ centrado real (sin sesgo) */
+  /* centrado real (sin sesgo) */
   --field-shift-x: 0px;
   transform: translateX(var(--field-shift-x));
 }
@@ -182,8 +182,7 @@
 }
 
 /* ===========================
-   POSICIONES (FORZADAS) — MÁS ORDENADAS
-   2 filas / 3 columnas con offsets suaves
+   POSICIONES (FORZADAS)
 =========================== */
 /* TOP ROW */
 #subprogramasField .subp-node:nth-child(1),
@@ -192,7 +191,7 @@
 }
 #subprogramasField .subp-node:nth-child(2),
 #subprogramasField .subp-node:nth-of-type(2){
-  left: 36% !important; top: 8% !important;   /* un pelín más arriba */
+  left: 36% !important; top: 8% !important;
 }
 #subprogramasField .subp-node:nth-child(3),
 #subprogramasField .subp-node:nth-of-type(3){
@@ -314,139 +313,51 @@
 .subm-name{ font-weight: 900; font-size: 12.5px; margin:0; }
 .subm-hint{ margin: 6px 0 0; font-size: 11px; color: rgba(235,240,255,.66); }
 
-
 /* =========================================================
    ASTRA ASSISTANT UI (TOASTS + COACH OVERLAY)
    - Mantén este bloque al FINAL para prioridad
 ========================================================= */
 
-/* ---------- Toasts ---------- */
-.astra-toasts{
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  z-index: 9998;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  pointer-events: none;
-  max-width: min(420px, calc(100vw - 28px));
-}
-
-.astra-toast{
-  pointer-events: auto;
-  border-radius: 18px;
-  border: 1px solid rgba(255,255,255,.14);
-  background:
-    radial-gradient(520px 220px at 18% 30%, rgba(140,160,255,.18), transparent 60%),
-    rgba(10,14,28,.92);
-  box-shadow: 0 18px 55px rgba(0,0,0,.45);
-  backdrop-filter: blur(10px);
-  overflow: hidden;
-  transform: translateY(6px);
-  opacity: 0;
-}
-
-.astra-toast__row{
-  display: grid;
-  grid-template-columns: 46px 1fr 34px;
-  align-items: start;
-  gap: 10px;
-  padding: 12px;
-}
-
-.astra-toast__img{
-  width: 46px;
-  height: 46px;
-  border-radius: 14px;
-  display: grid;
-  place-items: center;
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.10);
-}
-.astra-toast__img img{
-  width: 36px;
-  height: 36px;
-  object-fit: contain;
-  filter: drop-shadow(0 10px 20px rgba(0,0,0,.35));
-}
-
-.astra-toast__txt{ min-width: 0; }
-.astra-toast__title{
-  font-weight: 900;
-  font-size: 12.5px;
-  letter-spacing: .2px;
-  color: rgba(255,255,255,.95);
-  margin-top: 2px;
-}
-.astra-toast__msg{
-  margin: 4px 0 0;
-  font-size: 12px;
-  line-height: 1.35;
-  color: rgba(235,240,255,.78);
-  overflow-wrap: anywhere;
-}
-
-.astra-toast__actions{
-  display: flex;
-  justify-content: flex-end;
-}
-.astra-toast__close{
-  width: 30px;
-  height: 30px;
-  border-radius: 12px;
-  border: 1px solid rgba(255,255,255,.14);
-  background: rgba(255,255,255,.06);
-  color: rgba(255,255,255,.92);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-}
-.astra-toast__close:hover{
-  background: rgba(255,255,255,.10);
-  border-color: rgba(255,255,255,.22);
-}
-
-@media (max-width: 520px){
-  .astra-toasts{
-    right: 10px;
-    left: 10px;
-    bottom: 10px;
-    max-width: none;
-  }
-}
+/* ---------- Toasts ----------
+   ✅ Eliminado: estilos duplicados de toast (ya están en index)
+   Razón: tenías .astra-toasts / .astra-toast duplicados (left/bottom en index y right/bottom aquí).
+   Eso genera posiciones raras y “parpadeos”.
+*/
 
 /* =========================================================
    ✅ COACH NUEVO (planner.js)
-   - NO lo conviertas en modal
-   - NO lo pegues a bottom-left
-   - Solo ajustamos tamaños/estética del globo/imagen
+   - Ajustes únicos aquí (sin duplicar reglas)
 ========================================================= */
 
 .astra-coach{
-  /* el JS ya lo maneja; aquí solo aseguramos que no sea “capturado” por estilos viejos */
   position: fixed !important;
   inset: 0 !important;
   z-index: 9999 !important;
-  pointer-events: none; /* solo burbuja clickeable */
+  pointer-events: none;
+  background: rgba(0,0,0,.28);
+}
+
+.astra-coach--target{
+  outline: 2px solid rgba(140,160,255,.75);
+  box-shadow:
+    0 0 0 6px rgba(140,160,255,.20),
+    0 18px 55px rgba(0,0,0,.45);
+  border-radius: 18px;
+  position: relative;
+  z-index: 2;
 }
 
 .astra-coach__img{
-  /* Astra más grande */
-  width: 260px !important;
+  width: 320px !important;
   height: auto !important;
   filter: drop-shadow(0 16px 34px rgba(0,0,0,.55)) !important;
   pointer-events: none !important;
 }
 
-@media (max-width: 520px){
-  .astra-coach__img{ width: 200px !important; }
-}
-
 .astra-coach__bubble{
-  max-width: 360px !important;
-  padding: 12px 12px !important;
-  border-radius: 14px !important;
+  max-width: 320px !important;
+  padding: 10px 12px !important;
+  border-radius: 16px !important;
   background: rgba(10,14,28,.88) !important;
   border: 1px solid rgba(255,255,255,.12) !important;
   box-shadow: 0 18px 44px rgba(0,0,0,.45) !important;
@@ -477,12 +388,11 @@
   color: rgba(255,255,255,.90) !important;
   cursor: pointer !important;
 }
-
 .astra-coach__close:hover{ background: rgba(255,255,255,.10) !important; }
 
 .astra-coach__arrow{
-  width: 14px !important;
-  height: 14px !important;
+  width: 16px !important;
+  height: 16px !important;
   transform: rotate(45deg) !important;
   background: rgba(10,14,28,.88) !important;
   border-left: 1px solid rgba(255,255,255,.12) !important;
@@ -490,6 +400,14 @@
   pointer-events: none !important;
 }
 
+@media (max-width: 520px){
+  .astra-coach__img{ width: 220px !important; }
+  .astra-coach__bubble{ max-width: 290px !important; }
+}
+
 @media (prefers-reduced-motion: reduce){
-  .astra-toast{ transition: none !important; }
+  .subp-node,
+  .subm-item{
+    transition: none !important;
+  }
 }
