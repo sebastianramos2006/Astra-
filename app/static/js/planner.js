@@ -562,6 +562,190 @@ function toastCompat({
       ms: 7000,
     });
   }
+  function toDateInput(v) {
+    if (!v) return "";
+    return String(v).slice(0, 10);
+  }
+
+  function clamp01_100(n) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return 0;
+    return Math.max(0, Math.min(100, x));
+  }
+
+  function evidenciaIdOf(e) {
+    return e?.evidencia_id ?? e?.id ?? null;
+  }
+
+  function buildOperativaTableHTML(evidencias, submoduloNombre, iesNombre) {
+    const rows = evidencias.map((e, idx) => {
+      const evidId = evidenciaIdOf(e);
+      const titulo = e?.titulo ?? `Evidencia ${idx + 1}`;
+      const responsable = e?.responsable ?? "";
+      const valoracion = clamp01_100(e?.valoracion ?? 0);
+      const avance = clamp01_100(e?.avance_pct ?? 0);
+      const fechaIni = toDateInput(e?.fecha_inicio);
+      const fechaFin = toDateInput(e?.fecha_fin);
+      const presenta = !!e?.presenta;
+      const cat = (e?.categoria_si_no ?? "").toString();
+
+      return `
+        <tr data-evid="${escapeHtml(String(evidId))}">
+          <td style="width:40px;" class="text-secondary">${idx + 1}</td>
+
+          <td style="min-width:340px;">
+            <div class="fw-semibold">${escapeHtml(titulo)}</div>
+            <div class="text-secondary small">
+              Evidencia #${escapeHtml(String(evidId))} · Submódulo #${escapeHtml(String(e?.submodulo_id ?? ""))}
+            </div>
+          </td>
+
+          <td style="min-width:180px;">
+            <input class="form-control form-control-sm bg-dark text-light border-secondary js-responsable"
+                   value="${escapeHtml(responsable)}" placeholder="Responsable" />
+          </td>
+
+          <td style="min-width:130px;">
+            <div class="d-flex align-items-center gap-2">
+              <input type="checkbox" class="form-check-input js-presenta" ${presenta ? "checked" : ""} />
+              <span class="small text-secondary">Presenta</span>
+            </div>
+          </td>
+
+          <td style="min-width:120px;">
+            <input type="number" min="0" max="100"
+                   class="form-control form-control-sm bg-dark text-light border-secondary js-valoracion"
+                   value="${escapeHtml(String(valoracion))}" />
+            <div class="text-secondary small mt-1">Valoración %</div>
+          </td>
+
+          <td style="min-width:120px;">
+            <input type="number" min="0" max="100"
+                   class="form-control form-control-sm bg-dark text-light border-secondary js-avance"
+                   value="${escapeHtml(String(avance))}" />
+            <div class="text-secondary small mt-1">Avance %</div>
+          </td>
+
+          <td style="min-width:150px;">
+            <input type="date"
+                   class="form-control form-control-sm bg-dark text-light border-secondary js-fecha-inicio"
+                   value="${escapeHtml(fechaIni)}" />
+            <div class="text-secondary small mt-1">Inicio</div>
+          </td>
+
+          <td style="min-width:150px;">
+            <input type="date"
+                   class="form-control form-control-sm bg-dark text-light border-secondary js-fecha-fin"
+                   value="${escapeHtml(fechaFin)}" />
+            <div class="text-secondary small mt-1">Fin</div>
+          </td>
+
+          <td style="min-width:150px;">
+            <select class="form-select form-select-sm bg-dark text-light border-secondary js-categoria">
+              <option value="" ${cat === "" ? "selected" : ""}>—</option>
+              <option value="SI" ${cat.toUpperCase() === "SI" ? "selected" : ""}>SI</option>
+              <option value="NO" ${cat.toUpperCase() === "NO" ? "selected" : ""}>NO</option>
+            </select>
+            <div class="text-secondary small mt-1">Categoría</div>
+          </td>
+
+          <td style="min-width:140px;" class="text-end">
+            <button class="btn btn-outline-light btn-sm js-guardar">Guardar</button>
+            <div class="text-secondary small mt-1 js-status" style="min-height:18px;"></div>
+          </td>
+        </tr>
+      `;
+    });
+
+    return `
+      <div class="container-fluid mt-3">
+        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+          <div>
+            <div class="text-secondary small">OPERATIVA</div>
+            <h4 class="mb-1">${escapeHtml(submoduloNombre || "Submódulo")}</h4>
+            <div class="text-secondary small">IES: ${escapeHtml(iesNombre || "—")}</div>
+          </div>
+          <div class="text-secondary small">
+            Tip: edita y presiona <b>Guardar</b> por fila.
+          </div>
+        </div>
+
+        <hr class="my-2" />
+
+        <div class="table-responsive mt-3">
+          <table class="table table-dark table-sm align-middle">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Evidencia</th>
+                <th>Responsable</th>
+                <th>Presenta</th>
+                <th class="text-end">Valoración</th>
+                <th class="text-end">Avance</th>
+                <th>Fecha inicio</th>
+                <th>Fecha fin</th>
+                <th>Categoría</th>
+                <th class="text-end">Acción</th>
+              </tr>
+            </thead>
+            <tbody id="opTbody">
+              ${rows.join("") || `<tr><td colspan="10" class="text-secondary">No hay evidencias.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+
+  async function wireOperativaTableHandlers(rootEl) {
+    const tbody = rootEl.querySelector("#opTbody");
+    if (!tbody) return;
+
+    tbody.addEventListener("click", async (ev) => {
+      const btn = ev.target.closest(".js-guardar");
+      if (!btn) return;
+
+      const tr = ev.target.closest("tr[data-evid]");
+      if (!tr) return;
+
+      const evidId = Number(tr.dataset.evid);
+      if (!evidId) return;
+
+      const statusEl = tr.querySelector(".js-status");
+      const setStatus = (txt, kind = "muted") => {
+        if (!statusEl) return;
+        statusEl.className = `text-${kind} small mt-1 js-status`;
+        statusEl.textContent = txt || "";
+      };
+
+      const payload = {
+        responsable: tr.querySelector(".js-responsable")?.value?.trim() || "",
+        presenta: !!tr.querySelector(".js-presenta")?.checked,
+        valoracion: clamp01_100(tr.querySelector(".js-valoracion")?.value),
+        avance_pct: clamp01_100(tr.querySelector(".js-avance")?.value),
+        fecha_inicio: tr.querySelector(".js-fecha-inicio")?.value || null,
+        fecha_fin: tr.querySelector(".js-fecha-fin")?.value || null,
+        categoria_si_no: tr.querySelector(".js-categoria")?.value || null,
+      };
+
+      try {
+        btn.disabled = true;
+        setStatus("Guardando…", "secondary");
+        await saveEvidenciaPatch(evidId, payload);
+        setStatus("Guardado ✓", "success");
+        toastCompat({ type: "success", title: "Operativa", msg: "Fila guardada.", ms: 1800 });
+      } catch (e) {
+        console.error(e);
+        toastHttpError(e, "No se pudo guardar");
+        setStatus("Error al guardar", "danger");
+      } finally {
+        btn.disabled = false;
+        setTimeout(() => setStatus(""), 2500);
+      }
+    });
+  }
+
+
 
   // ============================================================
   // Admin gate message
@@ -955,7 +1139,7 @@ async function saveEvidenciaPatch(evidenciaId, payload) {
 }
 
 
-  // ============================================================
+ // ============================================================
 // Operativa (solo IES)
 // ============================================================
 async function openOperativa(submodulo) {
@@ -979,7 +1163,7 @@ async function openOperativa(submodulo) {
 
   const iesName = A.state.ies?.nombre || A.state.ies?.slug || "—";
 
-  // ✅ pinta skeleton/encabezado primero
+  // skeleton mientras carga
   operativaPanel.innerHTML = `
     <div class="container-fluid mt-3">
       <div class="text-secondary small">OPERATIVA</div>
@@ -987,33 +1171,40 @@ async function openOperativa(submodulo) {
       <div class="text-secondary small">IES: ${escapeHtml(iesName)}</div>
       <hr class="my-2" />
       <div class="text-secondary small">Cargando evidencias…</div>
-      <div id="evidenciasWrap" class="mt-2"></div>
     </div>
   `;
 
-  const wrap = document.getElementById("evidenciasWrap");
-  if (!wrap) return;
-
   try {
-    // ✅ AQUÍ se llama al endpoint correcto (IES: /operacion/submodulos/:id/evidencias)
+    // ✅ endpoint correcto para IES
     const evidencias = await fetchEvidencias(submodulo.id);
-
-    // ✅ por ahora render simple para confirmar que YA LLEGA DATA
     const arr = Array.isArray(evidencias) ? evidencias : (evidencias?.items || []);
-    wrap.innerHTML = `
-      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="text-secondary small">Evidencias encontradas: <b>${arr.length}</b></div>
-      </div>
-      <pre class="mt-2 small text-light" style="white-space:pre-wrap; border:1px solid rgba(255,255,255,.12); padding:10px; border-radius:12px; max-height:420px; overflow:auto;">${escapeHtml(JSON.stringify(arr.slice(0, 10), null, 2))}</pre>
-    `;
 
-    // ✅ Cuando esto funcione, aquí ya metemos tu tabla bonita.
+    // ✅ render tabla bonita
+    operativaPanel.innerHTML = buildOperativaTableHTML(
+      arr,
+      submodulo?.nombre || "Submódulo",
+      iesName
+    );
+
+    // ✅ conecta botones Guardar
+    await wireOperativaTableHandlers(operativaPanel);
   } catch (e) {
     console.error(e);
     toastHttpError(e, "No se pudieron cargar evidencias");
-    wrap.innerHTML = `<div class="text-danger small">No se pudieron cargar evidencias.</div>`;
+
+    operativaPanel.innerHTML = `
+      <div class="container-fluid mt-3">
+        <div class="text-danger small">No se pudieron cargar evidencias.</div>
+        <button id="btnBackOperativaErr" class="btn btn-outline-light btn-sm mt-2">Volver</button>
+      </div>
+    `;
+
+    document.getElementById("btnBackOperativaErr")?.addEventListener("click", () => {
+      showOnly("home");
+    });
   }
 }
+
 
   // ============================================================
   // Resumen (submódulo)
