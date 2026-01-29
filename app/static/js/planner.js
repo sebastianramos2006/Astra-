@@ -804,6 +804,14 @@ async function wireOperativaTableHandlers(rootEl) {
     const nivelKey =
       tr.querySelector(".js-valoracion-nivel")?.value || "deficiente";
 
+    // ✅ categoria_si_no debe ser boolean (true/false) o null
+    const catRaw = (tr.querySelector(".js-categoria")?.value || "")
+      .toString()
+      .trim()
+      .toUpperCase();
+
+    const catBool = catRaw === "SI" ? true : catRaw === "NO" ? false : null;
+
     const payload = {
       responsable: tr.querySelector(".js-responsable")?.value?.trim() || "",
       presenta: !!tr.querySelector(".js-presenta")?.checked,
@@ -820,7 +828,9 @@ async function wireOperativaTableHandlers(rootEl) {
       avance_pct: clamp01_100(tr.querySelector(".js-avance")?.value),
       fecha_inicio: tr.querySelector(".js-fecha-inicio")?.value || null,
       fecha_fin: tr.querySelector(".js-fecha-fin")?.value || null,
-      categoria_si_no: tr.querySelector(".js-categoria")?.value || null,
+
+      // ✅ ahora sí: boolean/null
+      categoria_si_no: catBool,
     };
 
     try {
