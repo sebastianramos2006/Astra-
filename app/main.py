@@ -17,7 +17,8 @@ from app.routes.seed_admin import router as seed_admin_router
 from app.routes.admin_usuarios import router as admin_usuarios_router
 from app.routes.admin_delete import router as admin_delete_router
 from app.routes.admin_ies import router as admin_ies_router
-from routes.auth_password import router as auth_password_router
+from app.routes.auth_password import router as auth_password_router
+
 app = FastAPI(
     title="Astra by CEDEPRO",
     version="0.1.0",
@@ -55,6 +56,7 @@ app.include_router(admin_usuarios_router)
 app.include_router(admin_ies_router)
 app.include_router(admin_delete_router)
 app.include_router(auth_password_router)
+
 # Root
 @app.get("/", include_in_schema=False)
 def root():
