@@ -57,7 +57,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   function isJwtLike(t) {
     return !!(t && String(t).split(".").length === 3);
   }
-
   // ============================================================
   // Auth gate
   // ============================================================
@@ -530,222 +529,321 @@ function toastCompat({
     }
   }
 
-  // ============================================================
-  // Error helper (401/403)
-  // ============================================================
-  function toastHttpError(e, context = "") {
-    const status = e?.status;
-    if (status === 401) {
-      toastCompat({
-        type: "warning",
-        title: "Sesión",
-        msg: "Tu sesión expiró o no es válida. Vuelve a iniciar sesión.",
-        ms: 6500,
-      });
-      return;
-    }
-    if (status === 403) {
-      toastCompat({
-        type: "danger",
-        title: "Permisos",
-        msg:
-          (context ? `${context}. ` : "") +
-          "El backend rechazó la operación por permisos. Revisa rol, token y que la IES activa sea la tuya.",
-        ms: 8500,
-      });
-      return;
-    }
+// ============================================================
+// Error helper (401/403) + helpers operativa + valoracion niveles
+// (Pega ESTE BLOQUE reemplazando todo tu bloque actual)
+// ============================================================
+
+function getHttpStatus(e) {
+  // Soporta errores lanzados por A.api/core.js y fetch genérico
+  return (
+    e?.status ??
+    e?.response?.status ??
+    e?.cause?.status ??
+    e?.data?.status ??
+    e?.statusCode ??
+    null
+  );
+}
+
+function getHttpDetail(e) {
+  return (
+    e?.data?.detail ||
+    e?.data?.message ||
+    e?.message ||
+    e?.toString?.() ||
+    ""
+  );
+}
+
+function toastHttpError(e, context = "") {
+  const status = getHttpStatus(e);
+  const detail = getHttpDetail(e) || "Falló la operación.";
+
+  if (status === 401) {
+    toastCompat({
+      type: "warning",
+      title: "Sesión",
+      msg: "Tu sesión expiró o no es válida. Vuelve a iniciar sesión.",
+      ms: 6500,
+    });
+    return;
+  }
+
+  if (status === 403) {
     toastCompat({
       type: "danger",
-      title: "Error",
-      msg: (context ? `${context}. ` : "") + (e?.message || "Falló la operación."),
-      ms: 7000,
+      title: "Permisos",
+      msg: (context ? `${context}. ` : "") + (detail || "Acceso denegado."),
+      ms: 8500,
     });
-  }
-  function toDateInput(v) {
-    if (!v) return "";
-    return String(v).slice(0, 10);
+    return;
   }
 
-  function clamp01_100(n) {
-    const x = Number(n);
-    if (!Number.isFinite(x)) return 0;
-    return Math.max(0, Math.min(100, x));
-  }
+  toastCompat({
+    type: "danger",
+    title: "Error",
+    msg: (context ? `${context}. ` : "") + detail,
+    ms: 7000,
+  });
+}
 
-  function evidenciaIdOf(e) {
-    return e?.evidencia_id ?? e?.id ?? null;
-  }
+function toDateInput(v) {
+  if (!v) return "";
+  return String(v).slice(0, 10);
+}
 
-  function buildOperativaTableHTML(evidencias, submoduloNombre, iesNombre) {
-    const rows = evidencias.map((e, idx) => {
-      const evidId = evidenciaIdOf(e);
-      const titulo = e?.titulo ?? `Evidencia ${idx + 1}`;
-      const responsable = e?.responsable ?? "";
-      const valoracion = clamp01_100(e?.valoracion ?? 0);
-      const avance = clamp01_100(e?.avance_pct ?? 0);
-      const fechaIni = toDateInput(e?.fecha_inicio);
-      const fechaFin = toDateInput(e?.fecha_fin);
-      const presenta = !!e?.presenta;
-      const cat = (e?.categoria_si_no ?? "").toString();
+function clamp01_100(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 0;
+  return Math.max(0, Math.min(100, x));
+}
 
-      return `
-        <tr data-evid="${escapeHtml(String(evidId))}">
-          <td style="width:40px;" class="text-secondary">${idx + 1}</td>
+function evidenciaIdOf(e) {
+  // soporta diferentes formas del backend
+  return e?.evidencia_id ?? e?.id ?? e?.evidenciaId ?? null;
+}
 
-          <td style="min-width:340px;">
-            <div class="fw-semibold">${escapeHtml(titulo)}</div>
-            <div class="text-secondary small">
-              Evidencia #${escapeHtml(String(evidId))} · Submódulo #${escapeHtml(String(e?.submodulo_id ?? ""))}
-            </div>
-          </td>
+// ============================================================
+// Valoracion por niveles (UI)
+// OJO: no dupliques este const en otra parte del archivo.
+// ============================================================
+const VALORACION_LEVELS = [
+  { key: "deficiente", label: "Deficiente", score: 25 },
+  { key: "poco_satisfactorio", label: "Poco satisfactorio", score: 50 },
+  { key: "cuasi_satisfactorio", label: "Cuasi satisfactorio", score: 75 },
+  { key: "satisfactorio", label: "Satisfactorio", score: 100 },
+];
 
-          <td style="min-width:180px;">
-            <input class="form-control form-control-sm bg-dark text-light border-secondary js-responsable"
-                   value="${escapeHtml(responsable)}" placeholder="Responsable" />
-          </td>
+function labelFromNivel(key) {
+  const it = VALORACION_LEVELS.find((x) => x.key === key);
+  return it ? it.label : "Deficiente";
+}
 
-          <td style="min-width:130px;">
-            <div class="d-flex align-items-center gap-2">
-              <input type="checkbox" class="form-check-input js-presenta" ${presenta ? "checked" : ""} />
-              <span class="small text-secondary">Presenta</span>
-            </div>
-          </td>
+function scoreFromNivel(key) {
+  const it = VALORACION_LEVELS.find((x) => x.key === key);
+  return it ? it.score : 25;
+}
 
-          <td style="min-width:120px;">
-            <input type="number" min="0" max="100"
-                   class="form-control form-control-sm bg-dark text-light border-secondary js-valoracion"
-                   value="${escapeHtml(String(valoracion))}" />
-            <div class="text-secondary small mt-1">Valoración %</div>
-          </td>
+function nivelFromValoracion(score0_100) {
+  const v = clamp01_100(score0_100);
+  if (v >= 88) return "satisfactorio";
+  if (v >= 63) return "cuasi_satisfactorio";
+  if (v >= 38) return "poco_satisfactorio";
+  return "deficiente";
+}
 
-          <td style="min-width:120px;">
-            <input type="number" min="0" max="100"
-                   class="form-control form-control-sm bg-dark text-light border-secondary js-avance"
-                   value="${escapeHtml(String(avance))}" />
-            <div class="text-secondary small mt-1">Avance %</div>
-          </td>
+// ============================================================
+// Render tabla operativa
+// ============================================================
+function buildOperativaTableHTML(evidencias, submoduloNombre, iesNombre) {
+  const rows = (Array.isArray(evidencias) ? evidencias : []).map((e, idx) => {
+    const evidId = evidenciaIdOf(e);
 
-          <td style="min-width:150px;">
-            <input type="date"
-                   class="form-control form-control-sm bg-dark text-light border-secondary js-fecha-inicio"
-                   value="${escapeHtml(fechaIni)}" />
-            <div class="text-secondary small mt-1">Inicio</div>
-          </td>
+    const titulo = e?.titulo ?? `Evidencia ${idx + 1}`;
+    const responsable = e?.responsable ?? "";
 
-          <td style="min-width:150px;">
-            <input type="date"
-                   class="form-control form-control-sm bg-dark text-light border-secondary js-fecha-fin"
-                   value="${escapeHtml(fechaFin)}" />
-            <div class="text-secondary small mt-1">Fin</div>
-          </td>
+    // backend puede traer valoracion numérica
+    const valoracionNum = clamp01_100(e?.valoracion ?? 0);
 
-          <td style="min-width:150px;">
-            <select class="form-select form-select-sm bg-dark text-light border-secondary js-categoria">
-              <option value="" ${cat === "" ? "selected" : ""}>—</option>
-              <option value="SI" ${cat.toUpperCase() === "SI" ? "selected" : ""}>SI</option>
-              <option value="NO" ${cat.toUpperCase() === "NO" ? "selected" : ""}>NO</option>
-            </select>
-            <div class="text-secondary small mt-1">Categoría</div>
-          </td>
+    // si backend ya guarda el nivel en extra_data, lo usamos
+    const nivelSavedRaw =
+      e?.extra_data?.valoracion_nivel ??
+      e?.extra_data?.valoracionNivel ??
+      e?.extra_data?.valoracion_level ??
+      "";
 
-          <td style="min-width:140px;" class="text-end">
-            <button class="btn btn-outline-light btn-sm js-guardar">Guardar</button>
-            <div class="text-secondary small mt-1 js-status" style="min-height:18px;"></div>
-          </td>
-        </tr>
-      `;
-    });
+    const nivelSaved = (nivelSavedRaw || "").toString().trim();
+    const nivelKey = nivelSaved ? nivelSaved : nivelFromValoracion(valoracionNum);
+
+    const avance = clamp01_100(e?.avance_pct ?? 0);
+    const fechaIni = toDateInput(e?.fecha_inicio);
+    const fechaFin = toDateInput(e?.fecha_fin);
+    const presenta = !!e?.presenta;
+    const cat = (e?.categoria_si_no ?? "").toString();
+
+    // si no hay id, no se puede guardar
+    const canSave = !!evidId;
 
     return `
-      <div class="container-fluid mt-3">
-        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
-          <div>
-            <div class="text-secondary small">OPERATIVA</div>
-            <h4 class="mb-1">${escapeHtml(submoduloNombre || "Submódulo")}</h4>
-            <div class="text-secondary small">IES: ${escapeHtml(iesNombre || "—")}</div>
-          </div>
+      <tr data-evid="${escapeHtml(String(evidId ?? ""))}">
+        <td style="width:40px;" class="text-secondary">${idx + 1}</td>
+
+        <td style="min-width:340px;">
+          <div class="fw-semibold">${escapeHtml(titulo)}</div>
           <div class="text-secondary small">
-            Tip: edita y presiona <b>Guardar</b> por fila.
+            Evidencia #${escapeHtml(String(evidId ?? "—"))}
+            · Submódulo #${escapeHtml(String(e?.submodulo_id ?? ""))}
           </div>
+        </td>
+
+        <td style="min-width:180px;">
+          <input class="form-control form-control-sm bg-dark text-light border-secondary js-responsable"
+                 value="${escapeHtml(responsable)}" placeholder="Responsable" />
+        </td>
+
+        <td style="min-width:130px;">
+          <div class="d-flex align-items-center gap-2">
+            <input type="checkbox" class="form-check-input js-presenta" ${presenta ? "checked" : ""} />
+            <span class="small text-secondary">Presenta</span>
+          </div>
+        </td>
+
+        <td style="min-width:210px;">
+          <select class="form-select form-select-sm bg-dark text-light border-secondary js-valoracion-nivel">
+            ${VALORACION_LEVELS.map((l) => {
+              const selected = l.key === nivelKey ? "selected" : "";
+              return `<option value="${escapeHtml(l.key)}" ${selected}>${escapeHtml(l.label)}</option>`;
+            }).join("")}
+          </select>
+          <div class="text-secondary small mt-1">Valoración</div>
+        </td>
+
+        <td style="min-width:120px;">
+          <input type="number" min="0" max="100"
+                 class="form-control form-control-sm bg-dark text-light border-secondary js-avance"
+                 value="${escapeHtml(String(avance))}" />
+          <div class="text-secondary small mt-1">Avance %</div>
+        </td>
+
+        <td style="min-width:150px;">
+          <input type="date"
+                 class="form-control form-control-sm bg-dark text-light border-secondary js-fecha-inicio"
+                 value="${escapeHtml(fechaIni)}" />
+          <div class="text-secondary small mt-1">Inicio</div>
+        </td>
+
+        <td style="min-width:150px;">
+          <input type="date"
+                 class="form-control form-control-sm bg-dark text-light border-secondary js-fecha-fin"
+                 value="${escapeHtml(fechaFin)}" />
+          <div class="text-secondary small mt-1">Fin</div>
+        </td>
+
+        <td style="min-width:150px;">
+          <select class="form-select form-select-sm bg-dark text-light border-secondary js-categoria">
+            <option value="" ${cat === "" ? "selected" : ""}>—</option>
+            <option value="SI" ${cat.toUpperCase() === "SI" ? "selected" : ""}>SI</option>
+            <option value="NO" ${cat.toUpperCase() === "NO" ? "selected" : ""}>NO</option>
+          </select>
+          <div class="text-secondary small mt-1">Categoría</div>
+        </td>
+
+        <td style="min-width:140px;" class="text-end">
+          <button class="btn btn-outline-light btn-sm js-guardar" ${canSave ? "" : "disabled"}>Guardar</button>
+          <div class="text-secondary small mt-1 js-status" style="min-height:18px;"></div>
+        </td>
+      </tr>
+    `;
+  });
+
+  return `
+    <div class="container-fluid mt-3">
+      <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+        <div>
+          <div class="text-secondary small">OPERATIVA</div>
+          <h4 class="mb-1">${escapeHtml(submoduloNombre || "Submódulo")}</h4>
+          <div class="text-secondary small">IES: ${escapeHtml(iesNombre || "—")}</div>
         </div>
-
-        <hr class="my-2" />
-
-        <div class="table-responsive mt-3">
-          <table class="table table-dark table-sm align-middle">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Evidencia</th>
-                <th>Responsable</th>
-                <th>Presenta</th>
-                <th class="text-end">Valoración</th>
-                <th class="text-end">Avance</th>
-                <th>Fecha inicio</th>
-                <th>Fecha fin</th>
-                <th>Categoría</th>
-                <th class="text-end">Acción</th>
-              </tr>
-            </thead>
-            <tbody id="opTbody">
-              ${rows.join("") || `<tr><td colspan="10" class="text-secondary">No hay evidencias.</td></tr>`}
-            </tbody>
-          </table>
+        <div class="text-secondary small">
+          Tip: edita y presiona <b>Guardar</b> por fila.
         </div>
       </div>
-    `;
-  }
 
-  async function wireOperativaTableHandlers(rootEl) {
-    const tbody = rootEl.querySelector("#opTbody");
-    if (!tbody) return;
+      <hr class="my-2" />
 
-    tbody.addEventListener("click", async (ev) => {
-      const btn = ev.target.closest(".js-guardar");
-      if (!btn) return;
+      <div class="table-responsive mt-3">
+        <table class="table table-dark table-sm align-middle">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Evidencia</th>
+              <th>Responsable</th>
+              <th>Presenta</th>
+              <th class="text-end">Valoración</th>
+              <th class="text-end">Avance</th>
+              <th>Fecha inicio</th>
+              <th>Fecha fin</th>
+              <th>Categoría</th>
+              <th class="text-end">Acción</th>
+            </tr>
+          </thead>
+          <tbody id="opTbody">
+            ${rows.join("") || `<tr><td colspan="10" class="text-secondary">No hay evidencias.</td></tr>`}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
 
-      const tr = ev.target.closest("tr[data-evid]");
-      if (!tr) return;
+// ============================================================
+// Handler Guardar por fila
+// ============================================================
+async function wireOperativaTableHandlers(rootEl) {
+  const tbody = rootEl.querySelector("#opTbody");
+  if (!tbody) return;
 
-      const evidId = Number(tr.dataset.evid);
-      if (!evidId) return;
+  tbody.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest(".js-guardar");
+    if (!btn) return;
 
-      const statusEl = tr.querySelector(".js-status");
-      const setStatus = (txt, kind = "muted") => {
-        if (!statusEl) return;
-        statusEl.className = `text-${kind} small mt-1 js-status`;
-        statusEl.textContent = txt || "";
-      };
+    const tr = ev.target.closest("tr[data-evid]");
+    if (!tr) return;
 
-      const payload = {
-        responsable: tr.querySelector(".js-responsable")?.value?.trim() || "",
-        presenta: !!tr.querySelector(".js-presenta")?.checked,
-        valoracion: clamp01_100(tr.querySelector(".js-valoracion")?.value),
-        avance_pct: clamp01_100(tr.querySelector(".js-avance")?.value),
-        fecha_inicio: tr.querySelector(".js-fecha-inicio")?.value || null,
-        fecha_fin: tr.querySelector(".js-fecha-fin")?.value || null,
-        categoria_si_no: tr.querySelector(".js-categoria")?.value || null,
-      };
+    const evidId = Number(tr.dataset.evid);
+    if (!evidId) return;
 
-      try {
-        btn.disabled = true;
-        setStatus("Guardando…", "secondary");
-        await saveEvidenciaPatch(evidId, payload);
-        setStatus("Guardado ✓", "success");
-        toastCompat({ type: "success", title: "Operativa", msg: "Fila guardada.", ms: 1800 });
-      } catch (e) {
-        console.error(e);
-        toastHttpError(e, "No se pudo guardar");
-        setStatus("Error al guardar", "danger");
-      } finally {
-        btn.disabled = false;
-        setTimeout(() => setStatus(""), 2500);
-      }
-    });
-  }
+    const statusEl = tr.querySelector(".js-status");
+    const setStatus = (txt, kind = "muted") => {
+      if (!statusEl) return;
+      statusEl.className = `text-${kind} small mt-1 js-status`;
+      statusEl.textContent = txt || "";
+    };
 
+    const nivelKey =
+      tr.querySelector(".js-valoracion-nivel")?.value || "deficiente";
 
+    const payload = {
+      responsable: tr.querySelector(".js-responsable")?.value?.trim() || "",
+      presenta: !!tr.querySelector(".js-presenta")?.checked,
+
+      // backend sigue recibiendo número (0-100)
+      valoracion: scoreFromNivel(nivelKey),
+
+      // extra_data solo si tu backend lo soporta (en tu modelo sí existe JSONB)
+      extra_data: {
+        valoracion_nivel: nivelKey,
+        valoracion_label: labelFromNivel(nivelKey),
+      },
+
+      avance_pct: clamp01_100(tr.querySelector(".js-avance")?.value),
+      fecha_inicio: tr.querySelector(".js-fecha-inicio")?.value || null,
+      fecha_fin: tr.querySelector(".js-fecha-fin")?.value || null,
+      categoria_si_no: tr.querySelector(".js-categoria")?.value || null,
+    };
+
+    try {
+      btn.disabled = true;
+      setStatus("Guardando…", "secondary");
+      await saveEvidenciaPatch(evidId, payload);
+      setStatus("Guardado ✓", "success");
+      toastCompat({
+        type: "success",
+        title: "Operativa",
+        msg: "Fila guardada.",
+        ms: 1800,
+      });
+    } catch (e) {
+      console.error(e);
+      toastHttpError(e, "No se pudo guardar");
+      setStatus("Error al guardar", "danger");
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => setStatus(""), 2500);
+    }
+  });
+}
 
   // ============================================================
   // Admin gate message
@@ -1086,9 +1184,13 @@ async function ensureIESResolved() {
     } catch {}
   }
 
- // ============================================================
+// ============================================================
 // Endpoint helpers (CORREGIDO: IES vs Admin)
 // ============================================================
+
+// ----------------------------
+// Evidencias
+// ----------------------------
 function evidenciasUrlForSubmodulo(submoduloId) {
   // ✅ IES (cliente): endpoint permitido (NO usa slug)
   if (isIES()) {
@@ -1101,16 +1203,27 @@ function evidenciasUrlForSubmodulo(submoduloId) {
   return `/operacion/ies/${slug}/submodulos/${submoduloId}/evidencias`;
 }
 
+// ----------------------------
+// Resumen
+// ----------------------------
 function resumenUrlForSubmodulo(submoduloId) {
-  // Resumen usa ies_id (sirve para IES y Admin)
+  // ✅ IES: su propio resumen (NO requiere ies_id en URL)
+  if (isIES()) {
+    return `/api/resumen/mio/submodulo/${submoduloId}`;
+  }
+
+  // ✅ Admin: necesita ies_id seleccionado
   const iesId =
     A.state.ies?.id ||
     (typeof A.getIesId === "function" ? A.getIesId() : null);
 
-  if (!iesId) throw new Error("Falta ies_id para cargar resumen.");
+  if (!iesId) throw new Error("Falta ies_id para cargar resumen (Admin).");
   return `/api/resumen/submodulo/${iesId}/${submoduloId}`;
 }
 
+// ----------------------------
+// Fetch helpers
+// ----------------------------
 async function fetchEvidencias(submoduloId) {
   return await A.api(evidenciasUrlForSubmodulo(submoduloId));
 }
@@ -1119,6 +1232,9 @@ async function fetchResumenSubmodulo(submoduloId) {
   return await A.api(resumenUrlForSubmodulo(submoduloId));
 }
 
+// ----------------------------
+// Save evidencia (PATCH)
+// ----------------------------
 async function saveEvidenciaPatch(evidenciaId, payload) {
   // ✅ IES: PATCH permitido (no usa slug)
   if (isIES()) {
@@ -1137,6 +1253,7 @@ async function saveEvidenciaPatch(evidenciaId, payload) {
     body: JSON.stringify(payload),
   });
 }
+
 
 
  // ============================================================

@@ -58,7 +58,6 @@ def _pick_responsable_mas_reciente(rows):
             continue
 
         try:
-            # u puede venir como datetime (ideal). Si viniera como string, esto puede fallar
             ts = u.timestamp() if hasattr(u, "timestamp") else None
         except Exception:
             ts = None
@@ -214,7 +213,10 @@ def _run_resumen(ies_id: int, submodulo_id: int, db: Session):
     }
 
 
-# ✅ ADMIN: /api/resumen/submodulo/{ies_id}/{submodulo_id}
+# ============================================================
+# ADMIN: puede ver cualquier IES (seleccionada)
+# GET /api/resumen/submodulo/{ies_id}/{submodulo_id}
+# ============================================================
 @router.get("/submodulo/{ies_id}/{submodulo_id}")
 def resumen_submodulo_admin(
     ies_id: int,
@@ -225,11 +227,18 @@ def resumen_submodulo_admin(
     return _run_resumen(ies_id, submodulo_id, db)
 
 
-# ✅ IES: /api/resumen/submodulo/{submodulo_id}
-@router.get("/submodulo/{submodulo_id}")
-def resumen_submodulo_ies(
+# ============================================================
+# IES: solo puede ver SU propia IES
+# GET /api/resumen/mio/submodulo/{submodulo_id}
+# ============================================================
+@router.get("/mio/submodulo/{submodulo_id}")
+def resumen_submodulo_mio(
     submodulo_id: int,
     db: Session = Depends(get_db),
     user: Usuario = Depends(require_ies_user),
 ):
-    return _run_resumen(user.ies_id, submodulo_id, db)
+    # require_ies_user ya valida que sea cliente/ies
+    # aqui aseguramos que solo use su ies_id
+    if not user or not getattr(user, "ies_id", None):
+        raise HTTPException(status_code=401, detail="Usuario IES sin ies_id válido.")
+    return _run_resumen(int(user.ies_id), submodulo_id, db)
