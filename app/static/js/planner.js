@@ -207,7 +207,7 @@ function toastCompat({
  // ============================================================
 //  Coach Astra (TOUR 4 pasos + 4 imágenes)
 // ============================================================
-const COACH_KEY = "astra_onboarding_v2_done"; // <- cambia a v2 para que se muestre 1 vez aunque ya viste v1
+const COACH_KEY = "astra_onboarding_v2_done"; // cambia a v2 para que se muestre 1 vez aunque ya viste v1
 let coach = null;
 let coachTimer = null;
 let coachStep = 0;
@@ -242,7 +242,7 @@ function ensureCoach() {
 
     <div class="astra-coach__footer"
          style="display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:10px;">
-      <button type="button" class="btn btn-outline-light btn-sm astra-coach__back">Atras</button>
+      <button type="button" class="btn btn-outline-light btn-sm astra-coach__back">Atrás</button>
       <div class="astra-coach__dots" style="opacity:.75; font-size:12px;">1/4</div>
       <button type="button" class="btn btn-light btn-sm astra-coach__next">Siguiente</button>
     </div>
@@ -266,6 +266,7 @@ function ensureCoach() {
     dots: bubble.querySelector(".astra-coach__dots"),
     btnBack: bubble.querySelector(".astra-coach__back"),
     btnNext: bubble.querySelector(".astra-coach__next"),
+    _cleanup: null,
   };
 
   return coach;
@@ -296,7 +297,12 @@ function applyCoachTargetHighlight(targetEl) {
 
 function positionCoachToTarget(targetEl) {
   const c = ensureCoach();
+  if (!targetEl || typeof targetEl.getBoundingClientRect !== "function") return;
+
   const r = targetEl.getBoundingClientRect();
+
+  // si el elemento no está visible (0x0), no movemos nada
+  if (!r.width && !r.height) return;
 
   const tx = r.left + r.width * 0.65;
   const ty = r.top + r.height * 0.40;
@@ -327,6 +333,10 @@ function showCoach({ target, text, pose = "point", autoCloseMs = 0 } = {}) {
 
   const c = ensureCoach();
   clearTimeout(coachTimer);
+
+  // evita fuga: limpia listeners anteriores antes de volver a setear
+  c._cleanup?.();
+  c._cleanup = null;
 
   setCoachPose(pose);
   c.msg.textContent = text || "";
@@ -373,6 +383,133 @@ function hideCoach(markDone = false) {
 function shouldAutoCoach() {
   try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
 }
+
+// ============================================================
+// TOUR (4 pasos) — Admin + IES
+// ============================================================
+function getTourRole() {
+  const A = window.ASTRA || {};
+  const r0 = (typeof A.getRole === "function" ? A.getRole() : "") || "";
+  const r = String(r0).toLowerCase().trim();
+  if (r === "admin") return "admin";
+  if (r === "ies" || r === "cliente") return "ies";
+  return r || "ies";
+}
+
+function pickTarget(selectors = []) {
+  for (const sel of selectors) {
+    const el = typeof sel === "string" ? document.querySelector(sel) : sel;
+    if (el) return el;
+  }
+  return document.body;
+}
+
+function getTourSteps() {
+  const role = getTourRole();
+
+  // elementos comunes
+  const btnGuide = document.getElementById("btnGuide");
+  const btnResumenGlobal = document.getElementById("btnResumenGlobal");
+  const field = document.getElementById("subprogramasField");
+  const canvas = document.getElementById("submodsCanvas");
+  const iesSelect = document.getElementById("iesSelect");
+  const btnLogout = document.getElementById("btnLogout");
+
+  if (role === "admin") {
+    return [
+      {
+        pose: "saludo",
+        target: pickTarget([iesSelect, "#iesSelect", btnGuide, "#btnGuide"]),
+        text: "Hola 👋 Soy Astra. Primero selecciona una IES para ver su información.",
+      },
+      {
+        pose: "point",
+        target: pickTarget([btnResumenGlobal, "#btnResumenGlobal"]),
+        text: "Luego abre el Resumen general para revisar avance, evidencias y responsables por submódulo.",
+      },
+      {
+        pose: "checklist",
+        target: pickTarget(["#adminIesBar", iesSelect, btnGuide]),
+        text: "Tip: puedes buscar IES por nombre/slug y cambiar entre instituciones sin perder el control.",
+      },
+      {
+        pose: "exit",
+        target: pickTarget([btnGuide, "#btnGuide", btnLogout, "#btnLogout"]),
+        text: "Listo. Si necesitas repasar, toca Guía cuando quieras.",
+      },
+    ];
+  }
+
+  // IES
+  return [
+    {
+      pose: "saludo",
+      target: pickTarget(["#subprogramasField .subp-node", field, btnGuide]),
+      text: "Bienvenido 👋 Elige un subprograma para empezar.",
+    },
+    {
+      pose: "point",
+      target: pickTarget([canvas, "#submodsCanvas", "#submodulosList", field]),
+      text: "Se abrirá el panel de submódulos. Selecciona uno para abrir la Operativa y registrar evidencias.",
+    },
+    {
+      pose: "checklist",
+      target: pickTarget([btnGuide, "#btnGuide"]),
+      text: "Recomendado: cambia tu clave provisional en tu apartado de cuenta (seguridad).",
+    },
+    {
+      pose: "exit",
+      target: pickTarget([btnLogout, "#btnLogout", btnGuide, "#btnGuide"]),
+      text: "Listo. Usa Guía cuando quieras repasar estos pasos.",
+    },
+  ];
+}
+
+function renderTourStep(idx) {
+  const steps = getTourSteps();
+  const c = ensureCoach();
+
+  coachStep = Math.max(0, Math.min(steps.length - 1, Number(idx) || 0));
+  const step = steps[coachStep];
+
+  if (c.dots) c.dots.textContent = `${coachStep + 1}/${steps.length}`;
+  if (c.btnBack) c.btnBack.disabled = coachStep === 0;
+
+  if (c.btnNext) {
+    c.btnNext.textContent = coachStep === steps.length - 1 ? "Terminar" : "Siguiente";
+  }
+
+  showCoach({
+    target: step.target,
+    pose: step.pose,
+    text: step.text,
+    autoCloseMs: 0,
+  });
+}
+
+function tourNext() {
+  const steps = getTourSteps();
+  if (coachStep >= steps.length - 1) {
+    hideCoach(true);
+    return;
+  }
+  renderTourStep(coachStep + 1);
+}
+
+function tourPrev() {
+  renderTourStep(coachStep - 1);
+}
+
+// ============================================================
+// API pública para botón "Guía" + auto-onboarding
+// (pon esto donde ya tengas A.openGuide; o reemplázalo)
+// ============================================================
+(function bindGuideApi() {
+  const A = (window.ASTRA = window.ASTRA || {});
+  A.openGuide = function () {
+    renderTourStep(0);
+  };
+})();
 
 // ============================================================
 // TOUR 4 PASOS
