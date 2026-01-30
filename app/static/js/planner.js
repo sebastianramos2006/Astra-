@@ -205,386 +205,421 @@ document.addEventListener("DOMContentLoaded", async () => {
   const constellation = document.querySelector(".constellation");
 
   // ============================================================
-  // Coach Astra (V4.3) - FIX: highlight functions + robust images
-  // ============================================================
-  (function AstraCoachV43() {
-    if (window.__astraCoachV4) return;
-    window.__astraCoachV4 = true;
+// Coach Astra (V4.3) - FIX: highlight functions + robust images
+// + Pose config EXACTA (exit/checklist/point) como en tu Chrome
+// ============================================================
+(function AstraCoachV43() {
+  if (window.__astraCoachV4) return;
+  window.__astraCoachV4 = true;
 
-    const A = (window.ASTRA = window.ASTRA || {});
-    const COACH_KEY = "astra_onboarding_v2_done";
+  const A = (window.ASTRA = window.ASTRA || {});
+  const COACH_KEY = "astra_onboarding_v2_done";
 
+  try {
+    document.querySelectorAll(".astra-coach").forEach((n) => n.remove());
+    document.querySelectorAll(".astra-virtual-target").forEach((n) => n.remove());
+    document.querySelectorAll(".astra-target-ring").forEach((n) => n.remove());
+  } catch {}
+
+  let coach = null;
+  let coachTimer = null;
+  let coachStep = 0;
+  let coachLastTarget = null;
+
+  function qsLocal(sel) { return document.querySelector(sel); }
+
+  function isVisible(el) {
+    if (!el) return false;
+
+    if (el.classList && el.classList.contains("astra-virtual-target")) {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    }
+
+    const cs = getComputedStyle(el);
+    if (cs.display === "none" || cs.visibility === "hidden") return false;
+    if (cs.opacity === "0") return false;
+
+    const rects = el.getClientRects();
+    return rects && rects.length > 0;
+  }
+
+  function pickTarget(candidates = []) {
+    for (const c of candidates) {
+      const el = typeof c === "string" ? qsLocal(c) : c;
+      if (el && isVisible(el)) return el;
+    }
+    return null;
+  }
+
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+
+  function scrollIntoViewSmart(el) {
+    try { el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" }); } catch {}
+  }
+
+  function getRoleSafe() {
     try {
-      document.querySelectorAll(".astra-coach").forEach((n) => n.remove());
-      document.querySelectorAll(".astra-virtual-target").forEach((n) => n.remove());
-      document.querySelectorAll(".astra-target-ring").forEach((n) => n.remove());
+      if (typeof A.getRole === "function") {
+        const r = String(A.getRole() || "").toLowerCase().trim();
+        if (r) return r;
+      }
+    } catch {}
+    const role = String(A?.state?.user?.role || A?.state?.role || "").toLowerCase().trim();
+    return role || "ies";
+  }
+
+  function ensureVirtualTarget(id, rect) {
+    let el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = id;
+      el.className = "astra-virtual-target";
+      el.style.position = "fixed";
+      el.style.zIndex = "9997";
+      el.style.pointerEvents = "none";
+      el.style.opacity = "0.001";
+      el.style.borderRadius = "14px";
+      document.body.appendChild(el);
+    }
+
+    const vw = window.innerWidth || 1200;
+    const vh = window.innerHeight || 800;
+
+    const px = (val, total) => {
+      if (typeof val === "string" && val.trim().endsWith("%")) {
+        const p = parseFloat(val);
+        return (total * (Number.isFinite(p) ? p : 0)) / 100;
+      }
+      const n = Number(val);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const left = px(rect.left, vw);
+    const top = px(rect.top, vh);
+    const width = px(rect.width, vw);
+    const height = px(rect.height, vh);
+
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+    el.style.width = `${Math.max(60, width)}px`;
+    el.style.height = `${Math.max(60, height)}px`;
+    return el;
+  }
+
+  // -------- Highlight FIX (no depende de z-index del target) --------
+  function getRing() {
+    let ring = document.querySelector(".astra-target-ring");
+    if (!ring) {
+      ring = document.createElement("div");
+      ring.className = "astra-target-ring";
+      ring.style.position = "fixed";
+      ring.style.zIndex = "999998";
+      ring.style.pointerEvents = "none";
+      ring.style.borderRadius = "16px";
+      ring.style.boxShadow =
+        "0 0 0 2px rgba(140,160,255,.65), 0 0 0 10px rgba(140,160,255,.14)";
+      ring.style.opacity = "0";
+      ring.style.transition = "opacity 120ms ease";
+      document.body.appendChild(ring);
+    }
+    return ring;
+  }
+
+  function applyCoachTargetHighlight(target) {
+    try {
+      document
+        .querySelectorAll(".astra-coach--target")
+        .forEach((n) => n.classList.remove("astra-coach--target"));
     } catch {}
 
-    let coach = null;
-    let coachTimer = null;
-    let coachStep = 0;
-    let coachLastTarget = null;
+    if (!target) return;
 
-    function qsLocal(sel) { return document.querySelector(sel); }
+    try { target.classList.add("astra-coach--target"); } catch {}
 
-    function isVisible(el) {
-      if (!el) return false;
-
-      if (el.classList && el.classList.contains("astra-virtual-target")) {
-        const r = el.getBoundingClientRect();
-        return r.width > 0 && r.height > 0;
-      }
-
-      const cs = getComputedStyle(el);
-      if (cs.display === "none" || cs.visibility === "hidden") return false;
-      if (cs.opacity === "0") return false;
-
-      const rects = el.getClientRects();
-      return rects && rects.length > 0;
+    const ring = getRing();
+    try {
+      const r = target.getBoundingClientRect();
+      const pad = 6;
+      ring.style.left = `${Math.max(0, r.left - pad)}px`;
+      ring.style.top = `${Math.max(0, r.top - pad)}px`;
+      ring.style.width = `${Math.max(24, r.width + pad * 2)}px`;
+      ring.style.height = `${Math.max(24, r.height + pad * 2)}px`;
+      ring.style.opacity = "1";
+    } catch {
+      ring.style.opacity = "0";
     }
+  }
 
-    function pickTarget(candidates = []) {
-      for (const c of candidates) {
-        const el = typeof c === "string" ? qsLocal(c) : c;
-        if (el && isVisible(el)) return el;
-      }
-      return null;
-    }
+  function clearCoachTargetHighlight() {
+    try {
+      document
+        .querySelectorAll(".astra-coach--target")
+        .forEach((n) => n.classList.remove("astra-coach--target"));
+    } catch {}
+    try {
+      const ring = document.querySelector(".astra-target-ring");
+      if (ring) ring.style.opacity = "0";
+    } catch {}
+  }
 
-    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+  function ensureCoach() {
+    if (coach) return coach;
 
-    function scrollIntoViewSmart(el) {
-      try { el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" }); } catch {}
-    }
+    const root = document.createElement("div");
+    root.className = "astra-coach";
+    root.style.display = "none";
 
-    function getRoleSafe() {
-      try {
-        if (typeof A.getRole === "function") {
-          const r = String(A.getRole() || "").toLowerCase().trim();
-          if (r) return r;
-        }
-      } catch {}
-      const role = String(A?.state?.user?.role || A?.state?.role || "").toLowerCase().trim();
-      return role || "ies";
-    }
+    const dim = document.createElement("div");
+    dim.className = "astra-coach__dim";
+    dim.addEventListener("click", () => hideCoach(false));
 
-    function ensureVirtualTarget(id, rect) {
-      let el = document.getElementById(id);
-      if (!el) {
-        el = document.createElement("div");
-        el.id = id;
-        el.className = "astra-virtual-target";
-        el.style.position = "fixed";
-        el.style.zIndex = "9997";
-        el.style.pointerEvents = "none";
-        el.style.opacity = "0.001";
-        el.style.borderRadius = "14px";
-        document.body.appendChild(el);
-      }
+    const line = document.createElement("div");
+    line.className = "astra-coach__line";
 
-      const vw = window.innerWidth || 1200;
-      const vh = window.innerHeight || 800;
+    const dot = document.createElement("div");
+    dot.className = "astra-coach__dot";
 
-      const px = (val, total) => {
-        if (typeof val === "string" && val.trim().endsWith("%")) {
-          const p = parseFloat(val);
-          return (total * (Number.isFinite(p) ? p : 0)) / 100;
-        }
-        const n = Number(val);
-        return Number.isFinite(n) ? n : 0;
-      };
+    const img = document.createElement("img");
+    img.className = "astra-coach__img";
+    img.alt = "Astra";
 
-      const left = px(rect.left, vw);
-      const top = px(rect.top, vh);
-      const width = px(rect.width, vw);
-      const height = px(rect.height, vh);
+    const bubble = document.createElement("div");
+    bubble.className = "astra-coach__bubble";
+    bubble.innerHTML = `
+      <div class="astra-coach__title">
+        <span>Astra</span>
+        <button class="astra-coach__close" title="Cerrar">×</button>
+      </div>
 
-      el.style.left = `${left}px`;
-      el.style.top = `${top}px`;
-      el.style.width = `${Math.max(60, width)}px`;
-      el.style.height = `${Math.max(60, height)}px`;
-      return el;
-    }
+      <div class="astra-coach__msg">…</div>
 
-    // -------- Highlight FIX (no depende de z-index del target) --------
-    function getRing() {
-      let ring = document.querySelector(".astra-target-ring");
-      if (!ring) {
-        ring = document.createElement("div");
-        ring.className = "astra-target-ring";
-        ring.style.position = "fixed";
-        ring.style.zIndex = "999998";
-        ring.style.pointerEvents = "none";
-        ring.style.borderRadius = "16px";
-        ring.style.boxShadow = "0 0 0 2px rgba(140,160,255,.65), 0 0 0 10px rgba(140,160,255,.14)";
-        ring.style.opacity = "0";
-        ring.style.transition = "opacity 120ms ease";
-        document.body.appendChild(ring);
-      }
-      return ring;
-    }
+      <div class="astra-coach__footer">
+        <button type="button" class="astra-coach__btn astra-coach__back">Atras</button>
+        <div class="astra-coach__dots">1/4</div>
+        <button type="button" class="astra-coach__btn astra-coach__btn--primary astra-coach__next">Siguiente</button>
+      </div>
+    `;
 
-    function applyCoachTargetHighlight(target) {
-      try {
-        document.querySelectorAll(".astra-coach--target").forEach((n) => n.classList.remove("astra-coach--target"));
-      } catch {}
+    bubble.querySelector(".astra-coach__close")?.addEventListener("click", () => hideCoach(true));
+    bubble.querySelector(".astra-coach__back")?.addEventListener("click", () => tourPrev());
+    bubble.querySelector(".astra-coach__next")?.addEventListener("click", () => tourNext());
 
-      if (!target) return;
+    root.appendChild(dim);
+    root.appendChild(line);
+    root.appendChild(dot);
+    root.appendChild(img);
+    root.appendChild(bubble);
+    document.body.appendChild(root);
 
-      try { target.classList.add("astra-coach--target"); } catch {}
+    coach = {
+      root, dim, line, dot, img, bubble,
+      msg: bubble.querySelector(".astra-coach__msg"),
+      dots: bubble.querySelector(".astra-coach__dots"),
+      btnBack: bubble.querySelector(".astra-coach__back"),
+      btnNext: bubble.querySelector(".astra-coach__next"),
+      _cleanup: null,
+      currentPose: "point",
+    };
 
-      const ring = getRing();
-      try {
-        const r = target.getBoundingClientRect();
-        const pad = 6;
-        ring.style.left = `${Math.max(0, r.left - pad)}px`;
-        ring.style.top = `${Math.max(0, r.top - pad)}px`;
-        ring.style.width = `${Math.max(24, r.width + pad * 2)}px`;
-        ring.style.height = `${Math.max(24, r.height + pad * 2)}px`;
-        ring.style.opacity = "1";
-      } catch {
-        ring.style.opacity = "0";
-      }
-    }
+    return coach;
+  }
 
-    function clearCoachTargetHighlight() {
-      try {
-        document.querySelectorAll(".astra-coach--target").forEach((n) => n.classList.remove("astra-coach--target"));
-      } catch {}
-      try {
-        const ring = document.querySelector(".astra-target-ring");
-        if (ring) ring.style.opacity = "0";
-      } catch {}
-    }
+  // ============================================================
+  // POSE CONFIG (EXACTA como en Chrome Elements)
+  // Se aplica SOLO en pantallas grandes para que no se rompa móvil.
+  // ============================================================
+  const POSE_OVERRIDE_MIN_VW = 980; // >= 980px aplica EXACTO
+  const POSE_OVERRIDES = {
+    exit:      { width: 260, left: 700,  top: 78 },
+    checklist: { width: 200, left: 520,  top: 441.284 },
+    point:     { width: 260, left: 80,   top: 390.37 },
+  };
 
-    function ensureCoach() {
-      if (coach) return coach;
+  function getPoseOverride(pose) {
+    const vw = window.innerWidth || 1200;
+    if (vw < POSE_OVERRIDE_MIN_VW) return null;
+    return POSE_OVERRIDES[pose] || null;
+  }
 
-      const root = document.createElement("div");
-      root.className = "astra-coach";
-      root.style.display = "none";
+  // -------- Poses / assets --------
+  function setCoachPose(pose = "point") {
+    const c = ensureCoach();
+    c.currentPose = pose;
 
-      const dim = document.createElement("div");
-      dim.className = "astra-coach__dim";
-      dim.addEventListener("click", () => hideCoach(false));
-
-      const line = document.createElement("div");
-      line.className = "astra-coach__line";
-
-      const dot = document.createElement("div");
-      dot.className = "astra-coach__dot";
-
-      const img = document.createElement("img");
-      img.className = "astra-coach__img";
-      img.alt = "Astra";
-
-      const bubble = document.createElement("div");
-      bubble.className = "astra-coach__bubble";
-      bubble.innerHTML = `
-        <div class="astra-coach__title">
-          <span>Astra</span>
-          <button class="astra-coach__close" title="Cerrar">×</button>
-        </div>
-
-        <div class="astra-coach__msg">…</div>
-
-        <div class="astra-coach__footer">
-          <button type="button" class="astra-coach__btn astra-coach__back">Atras</button>
-          <div class="astra-coach__dots">1/4</div>
-          <button type="button" class="astra-coach__btn astra-coach__btn--primary astra-coach__next">Siguiente</button>
-        </div>
-      `;
-
-      bubble.querySelector(".astra-coach__close")?.addEventListener("click", () => hideCoach(true));
-      bubble.querySelector(".astra-coach__back")?.addEventListener("click", () => tourPrev());
-      bubble.querySelector(".astra-coach__next")?.addEventListener("click", () => tourNext());
-
-      root.appendChild(dim);
-      root.appendChild(line);
-      root.appendChild(dot);
-      root.appendChild(img);
-      root.appendChild(bubble);
-      document.body.appendChild(root);
-
-      coach = {
-        root, dim, line, dot, img, bubble,
-        msg: bubble.querySelector(".astra-coach__msg"),
-        dots: bubble.querySelector(".astra-coach__dots"),
-        btnBack: bubble.querySelector(".astra-coach__back"),
-        btnNext: bubble.querySelector(".astra-coach__next"),
-        _cleanup: null,
-        currentPose: "point",
-      };
-
-      return coach;
-    }
-
-    // -------- Poses / assets --------
-    function setCoachPose(pose = "point") {
-      const c = ensureCoach();
-      c.currentPose = pose;
-
-      const poseCandidates = {
-        saludo: [
-          "/static/img/astra_saludo.png",
-          "/static/img/astra_saludo.PNG",
-          "/static/img/astra_saludo.webp",
-          "/static/img/astra_saludo.jpg",
-          "/static/img/astra_saludo.jpeg",
-          "/static/img/astra_hello.png",
-        ],
-        point: [
-          "/static/img/astra_point.png",
-          "/static/img/astra_point.PNG",
-          "/static/img/astra_point.webp",
-          "/static/img/astra_point.jpg",
-          "/static/img/astra_point.jpeg",
-          "/static/img/astra_pointer.png",
-        ],
-        checklist: [
-          "/static/img/astra_checklist.png",
-          "/static/img/astra_checklist.PNG",
-          "/static/img/astra_checklist.webp",
-          "/static/img/astra_checklist.jpg",
-          "/static/img/astra_checklist.jpeg",
-          "/static/img/astra_lista.png",
-        ],
-        exit: [
-          "/static/img/astra_exit.png",
-          "/static/img/astra_exit.PNG",
-          "/static/img/astra_exit.webp",
-          "/static/img/astra_exit.jpg",
-          "/static/img/astra_exit.jpeg",
-          "/static/img/astra_salida.png",
-          "/static/img/astra_out.png",
-          "/static/img/astra_bye.png",
-        ],
-      };
-
-      const fallbacks = [
-        "/static/img/astra.png",
-        "/static/img/astra.webp",
-        "/static/img/astra.jpg",
+    const poseCandidates = {
+      saludo: [
+        "/static/img/astra_saludo.png",
+        "/static/img/astra_saludo.PNG",
+        "/static/img/astra_saludo.webp",
+        "/static/img/astra_saludo.jpg",
+        "/static/img/astra_saludo.jpeg",
+        "/static/img/astra_hello.png",
+      ],
+      point: [
         "/static/img/astra_point.png",
-      ];
+        "/static/img/astra_point.PNG",
+        "/static/img/astra_point.webp",
+        "/static/img/astra_point.jpg",
+        "/static/img/astra_point.jpeg",
+        "/static/img/astra_pointer.png",
+      ],
+      checklist: [
+        "/static/img/astra_checklist.png",
+        "/static/img/astra_checklist.PNG",
+        "/static/img/astra_checklist.webp",
+        "/static/img/astra_checklist.jpg",
+        "/static/img/astra_checklist.jpeg",
+        "/static/img/astra_lista.png",
+      ],
+      exit: [
+        "/static/img/astra_exit.png",
+        "/static/img/astra_exit.PNG",
+        "/static/img/astra_exit.webp",
+        "/static/img/astra_exit.jpg",
+        "/static/img/astra_exit.jpeg",
+        "/static/img/astra_salida.png",
+        "/static/img/astra_out.png",
+        "/static/img/astra_bye.png",
+      ],
+    };
 
-      const list = [...(poseCandidates[pose] || poseCandidates.point), ...fallbacks];
-      let i = 0;
+    const fallbacks = [
+      "/static/img/astra.png",
+      "/static/img/astra.webp",
+      "/static/img/astra.jpg",
+      "/static/img/astra_point.png",
+    ];
 
-      c.img.onerror = null;
-      c.img.onload = null;
+    const list = [...(poseCandidates[pose] || poseCandidates.point), ...fallbacks];
+    let i = 0;
 
-      const tryNext = () => {
-        i += 1;
-        if (i >= list.length) return;
-        c.img.src = list[i];
-      };
+    c.img.onerror = null;
+    c.img.onload = null;
 
-      c.img.onload = () => {
-        try {
-          if (coachLastTarget && c?.root?.style?.display === "block") {
-            requestAnimationFrame(() => positionCoachToTarget(coachLastTarget));
-          }
-        } catch {}
-      };
-
-      c.img.onerror = () => tryNext();
+    const tryNext = () => {
+      i += 1;
+      if (i >= list.length) return;
       c.img.src = list[i];
+    };
 
-      const vw = Math.max(320, window.innerWidth || 1200);
-      const UNIFIED_SIZE = vw < 520 ? 190 : vw < 900 ? 230 : 260;
+    c.img.onload = () => {
+      try {
+        if (coachLastTarget && c?.root?.style?.display === "block") {
+          requestAnimationFrame(() => positionCoachToTarget(coachLastTarget));
+        }
+      } catch {}
+    };
 
-      c.img.style.width = `${UNIFIED_SIZE}px`;
-      c.img.style.maxWidth = `${UNIFIED_SIZE}px`;
-      c.img.style.maxHeight = "46vh";
-      c.img.style.height = "auto";
-      c.img.style.objectFit = "contain";
-      c.img.style.display = "block";
-      c.img.style.opacity = "1";
-    }
+    c.img.onerror = () => tryNext();
+    c.img.src = list[i];
 
-    function positionCoachToTarget(targetEl) {
-      const c = ensureCoach();
-      const pad = 12;
-      if (!targetEl || !isVisible(targetEl)) return;
+    // Tamaño por pose (checklist 200, resto 260)
+    const ov = getPoseOverride(pose);
+    const vw = Math.max(320, window.innerWidth || 1200);
 
-      coachLastTarget = targetEl;
+    let size = vw < 520 ? 190 : vw < 900 ? 230 : 260;
+    if (ov?.width) size = ov.width;
 
-      const r = targetEl.getBoundingClientRect();
-      const cx = r.left + r.width / 2;
-      const cy = r.top + r.height / 2;
+    c.img.style.width = `${size}px`;
+    c.img.style.maxWidth = `260px`;   // lo que viste en tu style
+    c.img.style.maxHeight = "46vh";
+    c.img.style.height = "auto";
+    c.img.style.objectFit = "contain";
+    c.img.style.display = "block";
+    c.img.style.opacity = "1";
+  }
 
-      c.bubble.style.visibility = "hidden";
-      c.bubble.style.left = `${pad}px`;
-      c.bubble.style.top = `${pad}px`;
-      const bw = c.bubble.offsetWidth || 320;
-      const bh = c.bubble.offsetHeight || 150;
-      c.bubble.style.visibility = "visible";
+  function positionCoachToTarget(targetEl) {
+    const c = ensureCoach();
+    const pad = 12;
+    if (!targetEl || !isVisible(targetEl)) return;
 
-      const preferLeft = cx > window.innerWidth * 0.58;
-      const candidates = preferLeft
-        ? [
-            { name: "left", x: r.left - bw - 14, y: cy - bh / 2 },
-            { name: "right", x: r.right + 14, y: cy - bh / 2 },
-            { name: "bottom", x: cx - bw / 2, y: r.bottom + 14 },
-            { name: "top", x: cx - bw / 2, y: r.top - bh - 14 },
-          ]
-        : [
-            { name: "right", x: r.right + 14, y: cy - bh / 2 },
-            { name: "left", x: r.left - bw - 14, y: cy - bh / 2 },
-            { name: "bottom", x: cx - bw / 2, y: r.bottom + 14 },
-            { name: "top", x: cx - bw / 2, y: r.top - bh - 14 },
-          ];
+    coachLastTarget = targetEl;
 
-      const fits = (x, y) =>
-        x >= pad &&
-        y >= pad &&
-        x + bw <= window.innerWidth - pad &&
-        y + bh <= window.innerHeight - pad;
+    const r = targetEl.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
 
-      const chosen = candidates.find((o) => fits(o.x, o.y)) || candidates[0];
+    // medir burbuja
+    c.bubble.style.visibility = "hidden";
+    c.bubble.style.left = `${pad}px`;
+    c.bubble.style.top = `${pad}px`;
+    const bw = c.bubble.offsetWidth || 320;
+    const bh = c.bubble.offsetHeight || 150;
+    c.bubble.style.visibility = "visible";
 
-      const bx = clamp(chosen.x, pad, window.innerWidth - bw - pad);
-      const by = clamp(chosen.y, pad, window.innerHeight - bh - pad);
+    // posicion burbuja
+    const preferLeft = cx > (window.innerWidth || 1200) * 0.58;
+    const candidates = preferLeft
+      ? [
+          { name: "left", x: r.left - bw - 14, y: cy - bh / 2 },
+          { name: "right", x: r.right + 14, y: cy - bh / 2 },
+          { name: "bottom", x: cx - bw / 2, y: r.bottom + 14 },
+          { name: "top", x: cx - bw / 2, y: r.top - bh - 14 },
+        ]
+      : [
+          { name: "right", x: r.right + 14, y: cy - bh / 2 },
+          { name: "left", x: r.left - bw - 14, y: cy - bh / 2 },
+          { name: "bottom", x: cx - bw / 2, y: r.bottom + 14 },
+          { name: "top", x: cx - bw / 2, y: r.top - bh - 14 },
+        ];
 
-      c.bubble.style.left = `${bx}px`;
-      c.bubble.style.top = `${by}px`;
-      // Lado REAL donde quedo la burbuja (despues del clamp)
-      const bubbleCenterX = bx + bw / 2;
-      const bubbleCenterY = by + bh / 2;
+    const fits = (x, y) =>
+      x >= pad &&
+      y >= pad &&
+      x + bw <= (window.innerWidth || 1200) - pad &&
+      y + bh <= (window.innerHeight || 800) - pad;
 
-      const dxB = bubbleCenterX - cx;
-      const dyB = bubbleCenterY - cy;
+    const chosen = candidates.find((o) => fits(o.x, o.y)) || candidates[0];
 
-      let bubbleSide = "right";
-      if (Math.abs(dxB) >= Math.abs(dyB)) {
-        bubbleSide = dxB < 0 ? "left" : "right";
-      } else {
-        bubbleSide = dyB < 0 ? "top" : "bottom";
-      }
+    const bx = clamp(chosen.x, pad, (window.innerWidth || 1200) - bw - pad);
+    const by = clamp(chosen.y, pad, (window.innerHeight || 800) - bh - pad);
 
+    c.bubble.style.left = `${bx}px`;
+    c.bubble.style.top = `${by}px`;
 
-      c.dot.style.left = `${cx - 5}px`;
-      c.dot.style.top = `${cy - 5}px`;
+    // lado real de burbuja vs target (para exit/opuesto)
+    const bubbleCenterX = bx + bw / 2;
+    const bubbleCenterY = by + bh / 2;
 
-      const bcx = bx + bw / 2;
-      const bcy = by + bh / 2;
-      const dx = cx - bcx;
-      const dy = cy - bcy;
-      const ang = Math.atan2(dy, dx);
-      const len = Math.max(45, Math.hypot(dx, dy) - 18);
+    const dxB = bubbleCenterX - cx;
+    const dyB = bubbleCenterY - cy;
 
-      c.line.style.left = `${bcx}px`;
-      c.line.style.top = `${bcy}px`;
-      c.line.style.width = `${len}px`;
-      c.line.style.transform = `rotate(${ang}rad)`;
+    let bubbleSide = "right";
+    if (Math.abs(dxB) >= Math.abs(dyB)) bubbleSide = dxB < 0 ? "left" : "right";
+    else bubbleSide = dyB < 0 ? "top" : "bottom";
 
-      const imgW = parseFloat(getComputedStyle(c.img).width) || 240;
-      const imgH = imgW * 1.05;
+    // dot y linea
+    c.dot.style.left = `${cx - 5}px`;
+    c.dot.style.top = `${cy - 5}px`;
 
-      let ax = cx;
-      let ay = cy;
+    const bcx = bx + bw / 2;
+    const bcy = by + bh / 2;
+    const dx = cx - bcx;
+    const dy = cy - bcy;
+    const ang = Math.atan2(dy, dx);
+    const len = Math.max(45, Math.hypot(dx, dy) - 18);
 
+    c.line.style.left = `${bcx}px`;
+    c.line.style.top = `${bcy}px`;
+    c.line.style.width = `${len}px`;
+    c.line.style.transform = `rotate(${ang}rad)`;
+
+    // ===== Astra placement =====
+    const imgW = parseFloat(getComputedStyle(c.img).width) || 260;
+    const imgH = imgW * 1.05;
+
+    let ax = cx;
+    let ay = cy;
+
+    // 1) si hay override (pantalla grande), usa EXACTO
+    const ov = getPoseOverride(c.currentPose);
+    if (ov && Number.isFinite(ov.left) && Number.isFinite(ov.top)) {
+      ax = ov.left;
+      ay = ov.top;
+    } else {
+      // 2) fallback calculado (responsivo)
       if (c.currentPose === "point") {
         ax = cx - (imgW * 0.95);
         ay = cy + (imgH * 0.10);
@@ -604,37 +639,37 @@ document.addEventListener("DOMContentLoaded", async () => {
         ax = cx - (imgW * 0.90);
         ay = cy + (imgH * 0.08);
       } else if (c.currentPose === "exit") {
-      const offX = imgW * 1.10;
-      const offY = imgH * 0.10;
+        // EXIT: Astra SIEMPRE al lado contrario de la burbuja
+        const offX = imgW * 1.10;
+        const offY = imgH * 0.10;
 
-      // Astra SIEMPRE al lado contrario de la burbuja
-      if (bubbleSide === "left") {
-        ax = cx + offX;
-        ay = cy + offY;
-      } else if (bubbleSide === "right") {
-        ax = cx - offX;
-        ay = cy + offY;
-      } else if (bubbleSide === "top") {
-        ax = cx - imgW * 0.15;
-        ay = cy + imgH * 0.85;
-      } else { // bottom
-        ax = cx - imgW * 0.15;
-        ay = cy - imgH * 0.55;
+        if (bubbleSide === "left") {
+          ax = cx + offX;
+          ay = cy + offY;
+        } else if (bubbleSide === "right") {
+          ax = cx - offX;
+          ay = cy + offY;
+        } else if (bubbleSide === "top") {
+          ax = cx - imgW * 0.15;
+          ay = cy + imgH * 0.85;
+        } else {
+          ax = cx - imgW * 0.15;
+          ay = cy - imgH * 0.55;
+        }
+      } else {
+        const offX = imgW * 1.05;
+        const offY = imgH * 0.20;
+
+        if (chosen.name === "left")  { ax = cx + offX; ay = cy + offY; }
+        if (chosen.name === "right") { ax = cx - offX; ay = cy + offY; }
+        if (chosen.name === "top")   { ax = cx - imgW * 0.20; ay = cy + imgH * 0.70; }
+        if (chosen.name === "bottom"){ ax = cx - imgW * 0.20; ay = cy - imgH * 0.40; }
       }
-
-    } else {
-      const offX = imgW * 1.05;
-      const offY = imgH * 0.20;
-
-      if (chosen.name === "left")  { ax = cx + offX; ay = cy + offY; }
-      if (chosen.name === "right") { ax = cx - offX; ay = cy + offY; }
-      if (chosen.name === "top")   { ax = cx - imgW * 0.20; ay = cy + imgH * 0.70; }
-      if (chosen.name === "bottom"){ ax = cx - imgW * 0.20; ay = cy - imgH * 0.40; }
     }
 
-    // Clamp REAL (para que no se vaya fuera de pantalla)
-    ax = clamp(ax, 10, window.innerWidth - imgW - 10);
-    ay = clamp(ay, 10, window.innerHeight - imgH - 10);
+    // Clamp real (que no se vaya fuera)
+    ax = clamp(ax, 10, (window.innerWidth || 1200) - imgW - 10);
+    ay = clamp(ay, 10, (window.innerHeight || 800) - imgH - 10);
 
     c.img.style.left = `${ax}px`;
     c.img.style.top = `${ay}px`;
@@ -643,212 +678,213 @@ document.addEventListener("DOMContentLoaded", async () => {
     applyCoachTargetHighlight(targetEl);
   }
 
-    function showCoach({ target, text, pose = "point", step = 1, total = 4, autoCloseMs = 0 } = {}) {
-      const c = ensureCoach();
+  function showCoach({ target, text, pose = "point", step = 1, total = 4, autoCloseMs = 0 } = {}) {
+    const c = ensureCoach();
 
-      c._cleanup?.();
-      c._cleanup = null;
+    c._cleanup?.();
+    c._cleanup = null;
 
-      clearTimeout(coachTimer);
+    clearTimeout(coachTimer);
 
-      if (!target || !isVisible(target)) return;
+    if (!target || !isVisible(target)) return;
 
-      setCoachPose(pose);
-      c.msg.textContent = text || "";
-      c.dots.textContent = `${step}/${total}`;
-      c.btnBack.disabled = step <= 1;
-      c.btnNext.textContent = step >= total ? "Finalizar" : "Siguiente";
+    setCoachPose(pose);
+    c.msg.textContent = text || "";
+    c.dots.textContent = `${step}/${total}`;
+    c.btnBack.disabled = step <= 1;
+    c.btnNext.textContent = step >= total ? "Finalizar" : "Siguiente";
 
-      c.root.style.display = "block";
+    c.root.style.display = "block";
 
-      if (!target.classList?.contains("astra-virtual-target")) {
-        scrollIntoViewSmart(target);
-      }
-
-      requestAnimationFrame(() => positionCoachToTarget(target));
-
-      const onMove = () => {
-        if (c.root.style.display !== "block") return;
-        if (!coachLastTarget) return;
-        positionCoachToTarget(coachLastTarget);
-      };
-
-      window.addEventListener("resize", onMove, { passive: true });
-      window.addEventListener("scroll", onMove, { passive: true });
-
-      c._cleanup = () => {
-        window.removeEventListener("resize", onMove);
-        window.removeEventListener("scroll", onMove);
-      };
-
-      if (autoCloseMs && autoCloseMs > 0) {
-        coachTimer = setTimeout(() => hideCoach(false), autoCloseMs);
-      }
+    if (!target.classList?.contains("astra-virtual-target")) {
+      scrollIntoViewSmart(target);
     }
 
-    function hideCoach(markDone = false) {
-      if (!coach) return;
-      clearTimeout(coachTimer);
+    requestAnimationFrame(() => positionCoachToTarget(target));
 
-      coach.root.style.display = "none";
-      coach._cleanup?.();
-      coach._cleanup = null;
+    const onMove = () => {
+      if (c.root.style.display !== "block") return;
+      if (!coachLastTarget) return;
+      positionCoachToTarget(coachLastTarget);
+    };
 
-      clearCoachTargetHighlight();
+    window.addEventListener("resize", onMove, { passive: true });
+    window.addEventListener("scroll", onMove, { passive: true });
 
-      if (markDone) {
-        try { localStorage.setItem(COACH_KEY, "1"); } catch {}
-      }
+    c._cleanup = () => {
+      window.removeEventListener("resize", onMove);
+      window.removeEventListener("scroll", onMove);
+    };
+
+    if (autoCloseMs && autoCloseMs > 0) {
+      coachTimer = setTimeout(() => hideCoach(false), autoCloseMs);
     }
+  }
 
-    function shouldAutoCoach() {
-      try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
+  function hideCoach(markDone = false) {
+    if (!coach) return;
+    clearTimeout(coachTimer);
+
+    coach.root.style.display = "none";
+    coach._cleanup?.();
+    coach._cleanup = null;
+
+    clearCoachTargetHighlight();
+
+    if (markDone) {
+      try { localStorage.setItem(COACH_KEY, "1"); } catch {}
     }
+  }
 
-    A.showCoach = showCoach;
-    A.hideCoach = hideCoach;
-    A.shouldAutoCoach = shouldAutoCoach;
+  function shouldAutoCoach() {
+    try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
+  }
 
-    window.showCoach = showCoach;
-    window.hideCoach = hideCoach;
-    window.shouldAutoCoach = shouldAutoCoach;
+  A.showCoach = showCoach;
+  A.hideCoach = hideCoach;
+  A.shouldAutoCoach = shouldAutoCoach;
 
-    // --------------------------
-    // TOUR
-    // --------------------------
-    function getTourSteps() {
-      const role = getRoleSafe();
+  window.showCoach = showCoach;
+  window.hideCoach = hideCoach;
+  window.shouldAutoCoach = shouldAutoCoach;
 
-      const field = document.getElementById("subprogramasField");
-      const firstSubp = field ? field.querySelector(".subp-node") : null;
+  // --------------------------
+  // TOUR
+  // --------------------------
+  function getTourSteps() {
+    const role = getRoleSafe();
 
-      const adminBar = document.getElementById("adminIesBar");
-      const iesSelect = document.getElementById("iesSelect");
+    const field = document.getElementById("subprogramasField");
+    const firstSubp = field ? field.querySelector(".subp-node") : null;
 
-      const btnResumenGlobal = document.getElementById("btnResumenGlobal");
-      const btnReset = document.getElementById("btnReset");
-      const btnGuide = document.getElementById("btnGuide");
-      const btnVerResumen = document.getElementById("btnVerResumen");
+    const adminBar = document.getElementById("adminIesBar");
+    const iesSelect = document.getElementById("iesSelect");
 
-      const safeHomeTarget = () =>
-        pickTarget([firstSubp, "#subprogramasField", ".constellation", ".astra-brand"]) ||
-        document.querySelector(".astra-brand") ||
-        document.body;
+    const btnResumenGlobal = document.getElementById("btnResumenGlobal");
+    const btnReset = document.getElementById("btnReset");
+    const btnGuide = document.getElementById("btnGuide");
+    const btnVerResumen = document.getElementById("btnVerResumen");
 
-      const safeBtnTarget = () =>
-        pickTarget([btnReset, "#btnReset", btnGuide, "#btnGuide", ".astra-brand"]) ||
-        document.querySelector(".astra-brand") ||
-        document.body;
+    const safeHomeTarget = () =>
+      pickTarget([firstSubp, "#subprogramasField", ".constellation", ".astra-brand"]) ||
+      document.querySelector(".astra-brand") ||
+      document.body;
 
-      const rightPanelAnchor = () =>
-        ensureVirtualTarget("astraVirtualRightPanel", {
-          left: "76%",
-          top: "42%",
-          width: "20%",
-          height: "30%",
-        });
+    const safeBtnTarget = () =>
+      pickTarget([btnReset, "#btnReset", btnGuide, "#btnGuide", ".astra-brand"]) ||
+      document.querySelector(".astra-brand") ||
+      document.body;
 
-      if (role === "admin") {
-        return [
-          {
-            pose: "saludo",
-            text: "Hola 👋 Soy Astra. Guia rapida en 4 pasos.",
-            target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar", ".astra-brand"]) || safeBtnTarget(),
-          },
-          {
-            pose: "point",
-            text: "Paso 1: selecciona una IES (arriba) para ver su informacion.",
-            target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar"]) || safeBtnTarget(),
-          },
-          {
-            pose: "checklist",
-            text: "Paso 2: entra a Resumen general para ver avances y evidencias.",
-            target: () => pickTarget([btnResumenGlobal, "#btnResumenGlobal"]) || safeBtnTarget(),
-          },
-          {
-            pose: "exit",
-            text: "Listo. Si quieres ver esta guia otra vez, usa el boton Guia.",
-            target: () => pickTarget([btnGuide, "#btnGuide", btnResumenGlobal, ".astra-brand"]) || safeBtnTarget(),
-          },
-        ];
-      }
+    const rightPanelAnchor = () =>
+      ensureVirtualTarget("astraVirtualRightPanel", {
+        left: "76%",
+        top: "42%",
+        width: "20%",
+        height: "30%",
+      });
 
+    if (role === "admin") {
       return [
         {
           pose: "saludo",
-          text: "Hola 👋 Soy Astra. Te muestro como usar ASTRA rapido.",
-          target: () => safeHomeTarget(),
+          text: "Hola 👋 Soy Astra. Guia rapida en 4 pasos.",
+          target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar", ".astra-brand"]) || safeBtnTarget(),
         },
         {
           pose: "point",
-          text: "Paso 1: haz clic en un subprograma para ver sus submodulos.",
-          target: () => pickTarget([firstSubp, "#subprogramasField .subp-node", field]) || safeHomeTarget(),
+          text: "Paso 1: selecciona una IES (arriba) para ver su informacion.",
+          target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar"]) || safeBtnTarget(),
         },
         {
           pose: "checklist",
-          text: "Paso 2: cuando se abra el panel derecho, elige un submodulo para registrar evidencias.",
-          target: () => pickTarget(["#submodsCanvas.show", "#submodulosList"]) || rightPanelAnchor(),
+          text: "Paso 2: entra a Resumen general para ver avances y evidencias.",
+          target: () => pickTarget([btnResumenGlobal, "#btnResumenGlobal"]) || safeBtnTarget(),
         },
         {
           pose: "exit",
-          text: "Paso 3: luego usa 'Ver resumen' para revisar el avance cuando quieras.",
-          target: () => pickTarget([btnVerResumen, "#btnVerResumen", btnReset, "#btnReset", btnGuide, "#btnGuide"]) || safeBtnTarget(),
+          text: "Listo. Si quieres ver esta guia otra vez, usa el boton Guia.",
+          target: () => pickTarget([btnGuide, "#btnGuide", btnResumenGlobal, ".astra-brand"]) || safeBtnTarget(),
         },
       ];
     }
 
-    function renderTourStep() {
-      const steps = getTourSteps();
-      const total = steps.length;
-      const idx = Math.max(0, Math.min(coachStep, total - 1));
-      const s = steps[idx];
+    return [
+      {
+        pose: "saludo",
+        text: "Hola 👋 Soy Astra. Te muestro como usar ASTRA rapido.",
+        target: () => safeHomeTarget(),
+      },
+      {
+        pose: "point",
+        text: "Paso 1: haz clic en un subprograma para ver sus submodulos.",
+        target: () => pickTarget([firstSubp, "#subprogramasField .subp-node", field]) || safeHomeTarget(),
+      },
+      {
+        pose: "checklist",
+        text: "Paso 2: cuando se abra el panel derecho, elige un submodulo para registrar evidencias.",
+        target: () => pickTarget(["#submodsCanvas.show", "#submodulosList"]) || rightPanelAnchor(),
+      },
+      {
+        pose: "exit",
+        text: "Paso 3: luego usa 'Ver resumen' para revisar el avance cuando quieras.",
+        target: () => pickTarget([btnVerResumen, "#btnVerResumen", btnReset, "#btnReset", btnGuide, "#btnGuide"]) || safeBtnTarget(),
+      },
+    ];
+  }
 
-      setTimeout(() => {
-        const target = (typeof s.target === "function") ? s.target() : s.target;
-        const fallback = document.querySelector(".astra-brand") || document.body;
+  function renderTourStep() {
+    const steps = getTourSteps();
+    const total = steps.length;
+    const idx = Math.max(0, Math.min(coachStep, total - 1));
+    const s = steps[idx];
 
-        showCoach({
-          target: target || fallback,
-          pose: s.pose,
-          text: s.text,
-          step: idx + 1,
-          total,
-        });
-      }, 60);
-    }
+    setTimeout(() => {
+      const target = (typeof s.target === "function") ? s.target() : s.target;
+      const fallback = document.querySelector(".astra-brand") || document.body;
 
-    function tourStart() { coachStep = 0; renderTourStep(); }
-
-    function tourNext() {
-      const steps = getTourSteps();
-      if (coachStep >= steps.length - 1) { hideCoach(true); return; }
-      coachStep += 1;
-      renderTourStep();
-    }
-
-    function tourPrev() {
-      if (coachStep <= 0) return;
-      coachStep -= 1;
-      renderTourStep();
-    }
-
-    A.openGuide = function () { tourStart(); };
-
-    const btnGuideEl = document.getElementById("btnGuide");
-    if (btnGuideEl && !btnGuideEl.dataset.wiredGuide) {
-      btnGuideEl.dataset.wiredGuide = "1";
-      btnGuideEl.addEventListener("click", (ev) => {
-        ev.preventDefault();
-        tourStart();
+      showCoach({
+        target: target || fallback,
+        pose: s.pose,
+        text: s.text,
+        step: idx + 1,
+        total,
       });
-    }
+    }, 60);
+  }
 
-    function autoStartIfNeeded() {
-      if (!shouldAutoCoach()) return;
-      setTimeout(() => { try { tourStart(); } catch {} }, 350);
-    }
-    autoStartIfNeeded();
-  })();
+  function tourStart() { coachStep = 0; renderTourStep(); }
+
+  function tourNext() {
+    const steps = getTourSteps();
+    if (coachStep >= steps.length - 1) { hideCoach(true); return; }
+    coachStep += 1;
+    renderTourStep();
+  }
+
+  function tourPrev() {
+    if (coachStep <= 0) return;
+    coachStep -= 1;
+    renderTourStep();
+  }
+
+  A.openGuide = function () { tourStart(); };
+
+  const btnGuideEl = document.getElementById("btnGuide");
+  if (btnGuideEl && !btnGuideEl.dataset.wiredGuide) {
+    btnGuideEl.dataset.wiredGuide = "1";
+    btnGuideEl.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      tourStart();
+    });
+  }
+
+  function autoStartIfNeeded() {
+    if (!shouldAutoCoach()) return;
+    setTimeout(() => { try { tourStart(); } catch {} }, 350);
+  }
+  autoStartIfNeeded();
+})();
+
 
   // ============================================================
   // Logout
