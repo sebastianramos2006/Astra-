@@ -374,288 +374,289 @@ const canvas =
 
     return coach;
   }
+ // -------- Poses / assets (EXIT robusto) --------
+function setCoachPose(pose = "point") {
+  const c = ensureCoach();
+  c.currentPose = pose;
 
-  // -------- Poses / assets (EXIT robusto) --------
-  function setCoachPose(pose = "point") {
-    const c = ensureCoach();
-    c.currentPose = pose;
-
-    const poseCandidates = {
-      saludo: [
-        "/static/img/astra_saludo.png",
-        "/static/img/astra_saludo.PNG",
-        "/static/img/astra_saludo.webp",
-        "/static/img/astra_saludo.jpg",
-        "/static/img/astra_saludo.jpeg",
-        "/static/img/astra_hello.png",
-      ],
-      point: [
-        "/static/img/astra_point.png",
-        "/static/img/astra_point.PNG",
-        "/static/img/astra_point.webp",
-        "/static/img/astra_point.jpg",
-        "/static/img/astra_point.jpeg",
-        "/static/img/astra_pointer.png",
-      ],
-      checklist: [
-        "/static/img/astra_checklist.png",
-        "/static/img/astra_checklist.PNG",
-        "/static/img/astra_checklist.webp",
-        "/static/img/astra_checklist.jpg",
-        "/static/img/astra_checklist.jpeg",
-        "/static/img/astra_lista.png",
-      ],
-      exit: [
-        "/static/img/astra_exit.png",
-        "/static/img/astra_exit.PNG",
-        "/static/img/astra_exit.webp",
-        "/static/img/astra_exit.jpg",
-        "/static/img/astra_exit.jpeg",
-        "/static/img/astra_salida.png",
-        "/static/img/astra_salida.webp",
-        "/static/img/astra_out.png",
-        "/static/img/astra_bye.png",
-      ],
-    };
-
-    const fallbacks = [
-      "/static/img/astra.png",
-      "/static/img/astra.webp",
-      "/static/img/astra.jpg",
-      // ultima bala: nunca desaparece -> usa point
+  const poseCandidates = {
+    saludo: [
+      "/static/img/astra_saludo.png",
+      "/static/img/astra_saludo.PNG",
+      "/static/img/astra_saludo.webp",
+      "/static/img/astra_saludo.jpg",
+      "/static/img/astra_saludo.jpeg",
+      "/static/img/astra_hello.png",
+    ],
+    point: [
       "/static/img/astra_point.png",
-    ];
+      "/static/img/astra_point.PNG",
+      "/static/img/astra_point.webp",
+      "/static/img/astra_point.jpg",
+      "/static/img/astra_point.jpeg",
+      "/static/img/astra_pointer.png",
+    ],
+    checklist: [
+      "/static/img/astra_checklist.png",
+      "/static/img/astra_checklist.PNG",
+      "/static/img/astra_checklist.webp",
+      "/static/img/astra_checklist.jpg",
+      "/static/img/astra_checklist.jpeg",
+      "/static/img/astra_lista.png",
+    ],
+    exit: [
+      "/static/img/astra_exit.png", // ✅ existe (200)
+      "/static/img/astra_exit.PNG",
+      "/static/img/astra_exit.webp",
+      "/static/img/astra_exit.jpg",
+      "/static/img/astra_exit.jpeg",
+      "/static/img/astra_salida.png",
+      "/static/img/astra_salida.webp",
+      "/static/img/astra_out.png",
+      "/static/img/astra_bye.png",
+    ],
+  };
 
-    const list = [...(poseCandidates[pose] || poseCandidates.point), ...fallbacks];
-    let i = 0;
+  const fallbacks = [
+    "/static/img/astra.png",
+    "/static/img/astra.webp",
+    "/static/img/astra.jpg",
+    "/static/img/astra_point.png", // ultima bala
+  ];
 
-    c.img.onerror = null;
-    c.img.onload = null;
+  const list = [...(poseCandidates[pose] || poseCandidates.point), ...fallbacks];
+  let i = 0;
 
-    const tryNext = () => {
-      i += 1;
-      if (i >= list.length) return;
-      c.img.src = list[i];
-    };
+  // limpia handlers anteriores
+  c.img.onerror = null;
+  c.img.onload = null;
 
-    c.img.onerror = () => tryNext();
+  const tryNext = () => {
+    i += 1;
+    if (i >= list.length) return;
     c.img.src = list[i];
+  };
 
-    // Tamaños por pose (CHECKLIST mas pequena)
-    const vw = Math.max(320, window.innerWidth || 1200);
-
-    const baseByPose = {
-      saludo: 250,
-      point: 280,
-      checklist: 210, // MAS PEQUENA
-      exit: 220,
-    };
-
-    const base = baseByPose[pose] || 260;
-    const maxW = vw < 520 ? 190 : vw < 900 ? 230 : 280;
-
-    c.img.style.width = `${Math.min(base, maxW)}px`;
-    c.img.style.maxWidth = "290px";
-    c.img.style.maxHeight = "48vh";
-    c.img.style.height = "auto";
-    c.img.style.objectFit = "contain";
-    c.img.style.display = "block";
-    c.img.style.opacity = "1";
-  }
-
-  function clearCoachTargetHighlight() {
-    if (coachLastTarget && coachLastTarget.classList) {
-      coachLastTarget.classList.remove("astra-coach--target");
-    }
-    coachLastTarget = null;
-  }
-
-  function applyCoachTargetHighlight(targetEl) {
-    clearCoachTargetHighlight();
-    if (!targetEl || !targetEl.classList) return;
-    targetEl.classList.add("astra-coach--target");
-    coachLastTarget = targetEl;
-  }
-
-  // -------- Positioning --------
-  function positionCoachToTarget(targetEl) {
-    const c = ensureCoach();
-    const pad = 12;
-    if (!targetEl || !isVisible(targetEl)) return;
-
-    const r = targetEl.getBoundingClientRect();
-    const cx = r.left + r.width / 2;
-    const cy = r.top + r.height / 2;
-
-    // medir burbuja
-    c.bubble.style.visibility = "hidden";
-    c.bubble.style.left = `${pad}px`;
-    c.bubble.style.top = `${pad}px`;
-    const bw = c.bubble.offsetWidth || 320;
-    const bh = c.bubble.offsetHeight || 150;
-    c.bubble.style.visibility = "visible";
-
-    // burbuja pegada al recuadro
-    const preferLeft = cx > window.innerWidth * 0.58;
-
-    const candidates = preferLeft
-      ? [
-          { name: "left",   x: r.left - bw - 14, y: cy - bh / 2 },
-          { name: "right",  x: r.right + 14,     y: cy - bh / 2 },
-          { name: "bottom", x: cx - bw / 2,      y: r.bottom + 14 },
-          { name: "top",    x: cx - bw / 2,      y: r.top - bh - 14 },
-        ]
-      : [
-          { name: "right",  x: r.right + 14,     y: cy - bh / 2 },
-          { name: "left",   x: r.left - bw - 14, y: cy - bh / 2 },
-          { name: "bottom", x: cx - bw / 2,      y: r.bottom + 14 },
-          { name: "top",    x: cx - bw / 2,      y: r.top - bh - 14 },
-        ];
-
-    const fits = (x, y) =>
-      x >= pad &&
-      y >= pad &&
-      x + bw <= window.innerWidth - pad &&
-      y + bh <= window.innerHeight - pad;
-
-    const chosen = candidates.find(o => fits(o.x, o.y)) || candidates[0];
-
-    const bx = clamp(chosen.x, pad, window.innerWidth - bw - pad);
-    const by = clamp(chosen.y, pad, window.innerHeight - bh - pad);
-
-    c.bubble.style.left = `${bx}px`;
-    c.bubble.style.top = `${by}px`;
-
-    // dot y linea
-    c.dot.style.left = `${cx - 5}px`;
-    c.dot.style.top = `${cy - 5}px`;
-
-    const bcx = bx + bw / 2;
-    const bcy = by + bh / 2;
-    const dx = cx - bcx;
-    const dy = cy - bcy;
-    const ang = Math.atan2(dy, dx);
-    const len = Math.max(45, Math.hypot(dx, dy) - 18);
-
-    c.line.style.left = `${bcx}px`;
-    c.line.style.top = `${bcy}px`;
-    c.line.style.width = `${len}px`;
-    c.line.style.transform = `rotate(${ang}rad)`;
-
-    // -------- Astra placement por pose --------
-    const imgW = parseFloat(getComputedStyle(c.img).width) || 240;
-    const imgH = imgW * 1.05;
-
-    let ax = cx;
-    let ay = cy;
-
-    // 1) POSE POINT: SIEMPRE a la izquierda del target (para apuntar a la derecha)
-    if (c.currentPose === "point") {
-      ax = cx - (imgW * 1.25);      // MAS A LA IZQUIERDA
-      ay = cy + (imgH * 0.10);
-    }
-    // 2) POSE CHECKLIST: centrada en la constelacion (pero apuntando hacia el panel/target)
-    else if (c.currentPose === "checklist") {
-      const cons = document.querySelector(".constellation") || document.getElementById("subprogramasField");
-      if (cons && isVisible(cons)) {
-        const cr = cons.getBoundingClientRect();
-        const ccx = cr.left + cr.width * 0.50;  // centro de constelacion
-        const ccy = cr.top + cr.height * 0.58;
-        ax = ccx - (imgW * 1.05);               // pegada al centro, pero a la izquierda
-        ay = ccy - (imgH * 0.25);
-      } else {
-        ax = cx - (imgW * 1.10);
-        ay = cy - (imgH * 0.10);
+  // ✅ al cargar, re-posiciona (sirve para exit)
+  c.img.onload = () => {
+    try {
+      if (coachLastTarget && c?.root?.style?.display === "block") {
+        requestAnimationFrame(() => positionCoachToTarget(coachLastTarget));
       }
-    }
-    // 3) SALUDO / EXIT: un poco mas neutral (opuesto a burbuja)
-    else {
-      const offX = imgW * 1.05;
-      const offY = imgH * 0.20;
+    } catch {}
+  };
 
-      if (chosen.name === "left")  { ax = cx + offX; ay = cy + offY; }
-      if (chosen.name === "right") { ax = cx - offX; ay = cy + offY; }
-      if (chosen.name === "top")   { ax = cx - imgW * 0.20; ay = cy + imgH * 0.70; }
-      if (chosen.name === "bottom"){ ax = cx - imgW * 0.20; ay = cy - imgH * 0.40; }
-    }
+  c.img.onerror = () => tryNext();
+  c.img.src = list[i];
 
-    ax = clamp(ax, -80, window.innerWidth + 80);
-    ay = clamp(ay, -80, window.innerHeight + 80);
+  // ✅ TAMAÑO UNIFICADO (todas iguales)
+  const vw = Math.max(320, window.innerWidth || 1200);
+  const UNIFIED_SIZE = vw < 520 ? 190 : vw < 900 ? 230 : 260;
 
-    c.img.style.left = `${ax}px`;
-    c.img.style.top = `${ay}px`;
+  c.img.style.width = `${UNIFIED_SIZE}px`;
+  c.img.style.maxWidth = `${UNIFIED_SIZE}px`;
+  c.img.style.maxHeight = "46vh";
+  c.img.style.height = "auto";
+  c.img.style.objectFit = "contain";
+  c.img.style.display = "block";
+  c.img.style.opacity = "1";
+}
+
+// -------- Positioning (Astra placement va AQUI, no en setCoachPose) --------
+function positionCoachToTarget(targetEl) {
+  const c = ensureCoach();
+  const pad = 12;
+  if (!targetEl || !isVisible(targetEl)) return;
+
+  const r = targetEl.getBoundingClientRect();
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
+
+  // medir burbuja
+  c.bubble.style.visibility = "hidden";
+  c.bubble.style.left = `${pad}px`;
+  c.bubble.style.top = `${pad}px`;
+  const bw = c.bubble.offsetWidth || 320;
+  const bh = c.bubble.offsetHeight || 150;
+  c.bubble.style.visibility = "visible";
+
+  // burbuja pegada al recuadro
+  const preferLeft = cx > window.innerWidth * 0.58;
+
+  const candidates = preferLeft
+    ? [
+        { name: "left", x: r.left - bw - 14, y: cy - bh / 2 },
+        { name: "right", x: r.right + 14, y: cy - bh / 2 },
+        { name: "bottom", x: cx - bw / 2, y: r.bottom + 14 },
+        { name: "top", x: cx - bw / 2, y: r.top - bh - 14 },
+      ]
+    : [
+        { name: "right", x: r.right + 14, y: cy - bh / 2 },
+        { name: "left", x: r.left - bw - 14, y: cy - bh / 2 },
+        { name: "bottom", x: cx - bw / 2, y: r.bottom + 14 },
+        { name: "top", x: cx - bw / 2, y: r.top - bh - 14 },
+      ];
+
+  const fits = (x, y) =>
+    x >= pad &&
+    y >= pad &&
+    x + bw <= window.innerWidth - pad &&
+    y + bh <= window.innerHeight - pad;
+
+  const chosen = candidates.find((o) => fits(o.x, o.y)) || candidates[0];
+
+  const bx = clamp(chosen.x, pad, window.innerWidth - bw - pad);
+  const by = clamp(chosen.y, pad, window.innerHeight - bh - pad);
+
+  c.bubble.style.left = `${bx}px`;
+  c.bubble.style.top = `${by}px`;
+
+  // dot y linea
+  c.dot.style.left = `${cx - 5}px`;
+  c.dot.style.top = `${cy - 5}px`;
+
+  const bcx = bx + bw / 2;
+  const bcy = by + bh / 2;
+  const dx = cx - bcx;
+  const dy = cy - bcy;
+  const ang = Math.atan2(dy, dx);
+  const len = Math.max(45, Math.hypot(dx, dy) - 18);
+
+  c.line.style.left = `${bcx}px`;
+  c.line.style.top = `${bcy}px`;
+  c.line.style.width = `${len}px`;
+  c.line.style.transform = `rotate(${ang}rad)`;
+
+  // -------- Astra placement por pose --------
+  const imgW = parseFloat(getComputedStyle(c.img).width) || 240;
+  const imgH = imgW * 1.05;
+
+  let ax = cx;
+  let ay = cy;
+
+  // 1) POINT: mas a la derecha (menos offset negativo)
+  if (c.currentPose === "point") {
+    ax = cx - (imgW * 0.95);
+    ay = cy + (imgH * 0.10);
   }
 
-  function showCoach({ target, text, pose = "point", step = 1, total = 4, autoCloseMs = 0 } = {}) {
-    const c = ensureCoach();
+  // 2) CHECKLIST: mas centrada en constelacion
+  else if (c.currentPose === "checklist") {
+    const cons = document.querySelector(".constellation") || document.getElementById("subprogramasField");
+    if (cons && isVisible(cons)) {
+      const cr = cons.getBoundingClientRect();
+      const ccx = cr.left + cr.width * 0.52;
+      const ccy = cr.top + cr.height * 0.58;
 
-    c._cleanup?.();
-    c._cleanup = null;
-
-    clearTimeout(coachTimer);
-
-    if (!target || !isVisible(target)) return;
-
-    setCoachPose(pose);
-    c.msg.textContent = text || "";
-    c.dots.textContent = `${step}/${total}`;
-    c.btnBack.disabled = step <= 1;
-    c.btnNext.textContent = step >= total ? "Finalizar" : "Siguiente";
-
-    c.root.style.display = "block";
-    applyCoachTargetHighlight(target);
-
-    if (!target.classList?.contains("astra-virtual-target")) {
-      scrollIntoViewSmart(target);
-    }
-
-    requestAnimationFrame(() => positionCoachToTarget(target));
-
-    const onMove = () => {
-      if (c.root.style.display !== "block") return;
-      if (!coachLastTarget) return;
-      positionCoachToTarget(coachLastTarget);
-    };
-
-    window.addEventListener("resize", onMove, { passive: true });
-    window.addEventListener("scroll", onMove, { passive: true });
-
-    c._cleanup = () => {
-      window.removeEventListener("resize", onMove);
-      window.removeEventListener("scroll", onMove);
-    };
-
-    if (autoCloseMs && autoCloseMs > 0) {
-      coachTimer = setTimeout(() => hideCoach(false), autoCloseMs);
+      ax = ccx - (imgW * 0.88);
+      ay = ccy - (imgH * 0.25);
+    } else {
+      ax = cx - (imgW * 0.95);
+      ay = cy - (imgH * 0.10);
     }
   }
 
-  function hideCoach(markDone = false) {
-    if (!coach) return;
-    clearTimeout(coachTimer);
-
-    coach.root.style.display = "none";
-    coach._cleanup?.();
-    coach._cleanup = null;
-
-    clearCoachTargetHighlight();
-
-    if (markDone) {
-      try { localStorage.setItem(COACH_KEY, "1"); } catch {}
-    }
+  // 3) SALUDO
+  else if (c.currentPose === "saludo") {
+    ax = cx - (imgW * 0.90);
+    ay = cy + (imgH * 0.08);
   }
 
-  function shouldAutoCoach() {
-    try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
+  // 4) EXIT
+  else if (c.currentPose === "exit") {
+    ax = cx - (imgW * 0.92);
+    ay = cy + (imgH * 0.10);
   }
 
-  A.showCoach = showCoach;
-  A.hideCoach = hideCoach;
-  A.shouldAutoCoach = shouldAutoCoach;
+  // 5) otros: opuesto a burbuja
+  else {
+    const offX = imgW * 1.05;
+    const offY = imgH * 0.20;
 
-  window.showCoach = showCoach;
-  window.hideCoach = hideCoach;
-  window.shouldAutoCoach = shouldAutoCoach;
+    if (chosen.name === "left")  { ax = cx + offX; ay = cy + offY; }
+    if (chosen.name === "right") { ax = cx - offX; ay = cy + offY; }
+    if (chosen.name === "top")   { ax = cx - imgW * 0.20; ay = cy + imgH * 0.70; }
+    if (chosen.name === "bottom"){ ax = cx - imgW * 0.20; ay = cy - imgH * 0.40; }
+  }
+
+  ax = clamp(ax, -80, window.innerWidth + 80);
+  ay = clamp(ay, -80, window.innerHeight + 80);
+
+  c.img.style.left = `${ax}px`;
+  c.img.style.top = `${ay}px`;
+}
+
+// -------- Public show/hide --------
+function showCoach({ target, text, pose = "point", step = 1, total = 4, autoCloseMs = 0 } = {}) {
+  const c = ensureCoach();
+
+  c._cleanup?.();
+  c._cleanup = null;
+
+  clearTimeout(coachTimer);
+
+  if (!target || !isVisible(target)) return;
+
+  setCoachPose(pose);
+  c.msg.textContent = text || "";
+  c.dots.textContent = `${step}/${total}`;
+  c.btnBack.disabled = step <= 1;
+  c.btnNext.textContent = step >= total ? "Finalizar" : "Siguiente";
+
+  c.root.style.display = "block";
+  applyCoachTargetHighlight(target);
+
+  if (!target.classList?.contains("astra-virtual-target")) {
+    scrollIntoViewSmart(target);
+  }
+
+  requestAnimationFrame(() => positionCoachToTarget(target));
+
+  const onMove = () => {
+    if (c.root.style.display !== "block") return;
+    if (!coachLastTarget) return;
+    positionCoachToTarget(coachLastTarget);
+  };
+
+  window.addEventListener("resize", onMove, { passive: true });
+  window.addEventListener("scroll", onMove, { passive: true });
+
+  c._cleanup = () => {
+    window.removeEventListener("resize", onMove);
+    window.removeEventListener("scroll", onMove);
+  };
+
+  if (autoCloseMs && autoCloseMs > 0) {
+    coachTimer = setTimeout(() => hideCoach(false), autoCloseMs);
+  }
+}
+
+function hideCoach(markDone = false) {
+  if (!coach) return;
+  clearTimeout(coachTimer);
+
+  coach.root.style.display = "none";
+  coach._cleanup?.();
+  coach._cleanup = null;
+
+  clearCoachTargetHighlight();
+
+  if (markDone) {
+    try { localStorage.setItem(COACH_KEY, "1"); } catch {}
+  }
+}
+
+function shouldAutoCoach() {
+  try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
+}
+
+A.showCoach = showCoach;
+A.hideCoach = hideCoach;
+A.shouldAutoCoach = shouldAutoCoach;
+
+window.showCoach = showCoach;
+window.hideCoach = hideCoach;
+window.shouldAutoCoach = shouldAutoCoach;
 
   // --------------------------
   // TOUR
