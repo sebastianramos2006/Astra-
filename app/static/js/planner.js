@@ -205,725 +205,557 @@ function toastCompat({
   const constellation = document.querySelector(".constellation");
 
 // ============================================================
-//  Coach Astra (TOUR 4 pasos + 4 imagenes) - Admin + IES
-//  FIX UI: burbuja pequena + Astra afuera + linea al objetivo
+//  Coach Astra (TOUR 4 pasos + 4 imagenes) - Admin + IES (V3)
+//  FIX: mini guia real + targets reales + abre panel si falta + guard anti-duplicados
 // ============================================================
-const COACH_KEY = "astra_onboarding_v2_done"; // v2: se muestra 1 vez aunque ya viste v1
-let coach = null;
-let coachTimer = null;
-let coachStep = 0;
-let coachLastTarget = null;
+(function AstraCoachV3() {
+  if (window.__astraCoachV3) return; // evita dobles inicializaciones
+  window.__astraCoachV3 = true;
 
-function injectCoachStylesOnce() {
-  if (document.getElementById("astraCoachStyles")) return;
-  const st = document.createElement("style");
-  st.id = "astraCoachStyles";
-  st.textContent = `
-    .astra-coach { position: fixed; inset: 0; z-index: 9999; pointer-events: none; }
-    .astra-coach__dim {
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,.30);
-      backdrop-filter: blur(2px);
-      pointer-events: auto;
-    }
+  const A = (window.ASTRA = window.ASTRA || {});
+  const COACH_KEY = "astra_onboarding_v2_done";
 
-    /* Astra grande y "afuera" */
-    .astra-coach__img {
-      position: fixed;
-      width: 420px;
-      height: auto;
-      filter: drop-shadow(0 18px 40px rgba(0,0,0,.65));
-      pointer-events: none;
-      transform: translate(-50%, -50%);
-      user-select: none;
-    }
+  let coach = null;
+  let coachTimer = null;
+  let coachStep = 0;
+  let coachLastTarget = null;
 
-    /* burbuja compacta */
-    .astra-coach__bubble {
-      position: fixed;
-      width: min(320px, calc(100vw - 24px));
-      padding: 10px 12px;
-      border-radius: 16px;
-      background: rgba(10,14,28,.92);
-      border: 1px solid rgba(255,255,255,.14);
-      box-shadow: 0 18px 44px rgba(0,0,0,.50);
-      color: rgba(255,255,255,.92);
-      font-size: 13px;
-      line-height: 1.35;
-      pointer-events: auto;
-      backdrop-filter: blur(12px);
-    }
+  // --------------------------
+  // Styles
+  // --------------------------
+  function injectCoachStylesOnce() {
+    if (document.getElementById("astraCoachStylesV3")) return;
+    const st = document.createElement("style");
+    st.id = "astraCoachStylesV3";
+    st.textContent = `
+      .astra-coach { position: fixed; inset: 0; z-index: 999999; pointer-events: none; }
+      .astra-coach__dim {
+        position: fixed; inset: 0;
+        background: rgba(0,0,0,.22);
+        backdrop-filter: blur(2px);
+        pointer-events: auto;
+      }
 
-    .astra-coach__title {
-      font-weight: 800;
-      font-size: 12px;
-      opacity: .95;
-      margin-bottom: 6px;
-      display:flex;
-      justify-content: space-between;
-      gap: 8px;
-      align-items: center;
-    }
+      /* Astra grande (queda "afuera") */
+      .astra-coach__img {
+        position: fixed;
+        width: 420px;
+        height: auto;
+        filter: drop-shadow(0 18px 40px rgba(0,0,0,.65));
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+        user-select: none;
+        z-index: 2;
+      }
 
-    .astra-coach__close {
-      width: 28px; height: 28px;
-      border-radius: 10px;
-      border: 1px solid rgba(255,255,255,.14);
-      background: rgba(255,255,255,.06);
-      color: rgba(255,255,255,.85);
-      cursor: pointer;
-    }
-    .astra-coach__close:hover { background: rgba(255,255,255,.10); }
+      /* Burbuja MINI (forzamos estilo para no depender de Bootstrap) */
+      .astra-coach__bubble {
+        position: fixed;
+        width: min(280px, calc(100vw - 20px));
+        padding: 10px 12px;
+        border-radius: 16px;
+        background: rgba(10,14,28,.92);
+        border: 1px solid rgba(255,255,255,.14);
+        box-shadow: 0 18px 44px rgba(0,0,0,.55);
+        color: rgba(255,255,255,.92);
+        font-size: 12.5px;
+        line-height: 1.35;
+        pointer-events: auto;
+        backdrop-filter: blur(12px);
+        z-index: 4;
+      }
 
-    /* linea que apunta al target */
-    .astra-coach__line {
-      position: fixed;
-      height: 2px;
-      background: rgba(255,255,255,.35);
-      box-shadow: 0 0 0 1px rgba(0,0,0,.20);
-      transform-origin: 0 50%;
-      pointer-events: none;
-    }
-    .astra-coach__dot {
-      position: fixed;
-      width: 10px; height: 10px;
-      border-radius: 999px;
-      background: rgba(255,255,255,.65);
-      box-shadow: 0 0 0 6px rgba(88,166,255,.18);
-      pointer-events: none;
-    }
+      .astra-coach__title {
+        font-weight: 800;
+        font-size: 12px;
+        opacity: .95;
+        margin-bottom: 6px;
+        display:flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: center;
+      }
 
-    .astra-coach__footer {
-      display:flex;
-      gap:10px;
-      justify-content:space-between;
-      align-items:center;
-      margin-top:10px;
-    }
-    .astra-coach__dots { opacity:.75; font-size:12px; }
+      .astra-coach__close {
+        width: 26px; height: 26px;
+        border-radius: 10px;
+        border: 1px solid rgba(255,255,255,.14);
+        background: rgba(255,255,255,.06);
+        color: rgba(255,255,255,.85);
+        cursor: pointer;
+        font-size: 18px;
+        line-height: 1;
+      }
+      .astra-coach__close:hover { background: rgba(255,255,255,.10); }
 
-    /* resaltado del objetivo */
-    .astra-coach--target {
-      outline: 2px solid rgba(255,255,255,.22);
-      box-shadow: 0 0 0 7px rgba(88,166,255,.12);
-      border-radius: 14px;
-      position: relative;
-      z-index: 10000;
-    }
-  `;
-  document.head.appendChild(st);
-}
+      /* Controles mini (override bootstrap) */
+      .astra-coach__footer { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:10px; }
+      .astra-coach__dots { opacity:.75; font-size:12px; }
+      .astra-coach__btn {
+        border-radius: 10px;
+        padding: 6px 10px;
+        font-size: 12px;
+        line-height: 1;
+        border: 1px solid rgba(255,255,255,.18);
+        background: rgba(255,255,255,.06);
+        color: rgba(255,255,255,.90);
+        cursor: pointer;
+        user-select: none;
+      }
+      .astra-coach__btn:hover { background: rgba(255,255,255,.10); }
+      .astra-coach__btn--primary {
+        background: rgba(255,255,255,.92);
+        color: rgba(0,0,0,.85);
+        border-color: rgba(255,255,255,.70);
+      }
+      .astra-coach__btn--primary:hover { background: rgba(255,255,255,.98); }
+      .astra-coach__btn[disabled] { opacity:.45; cursor:not-allowed; }
 
-function isAdminSafe() {
-  try { if (typeof isAdmin === "function") return !!isAdmin(); } catch {}
-  const role = (window.ASTRA?.state?.user?.role || window.ASTRA?.state?.role || "").toLowerCase();
-  return role === "admin";
-}
+      /* Linea y punto al target */
+      .astra-coach__line {
+        position: fixed;
+        height: 2px;
+        background: rgba(255,255,255,.35);
+        box-shadow: 0 0 0 1px rgba(0,0,0,.20);
+        transform-origin: 0 50%;
+        pointer-events: none;
+        z-index: 3;
+      }
+      .astra-coach__dot {
+        position: fixed;
+        width: 10px; height: 10px;
+        border-radius: 999px;
+        background: rgba(255,255,255,.65);
+        box-shadow: 0 0 0 7px rgba(88,166,255,.16);
+        pointer-events: none;
+        z-index: 3;
+      }
 
-function isIESSafe() {
-  try { if (typeof isIES === "function") return !!isIES(); } catch {}
-  return !isAdminSafe();
-}
-
-function ensureCoach() {
-  if (coach) return coach;
-
-  injectCoachStylesOnce();
-
-  const root = document.createElement("div");
-  root.className = "astra-coach";
-  root.style.display = "none";
-
-  const dim = document.createElement("div");
-  dim.className = "astra-coach__dim";
-  dim.addEventListener("click", () => hideCoach(false)); // click fuera cierra
-
-  const img = document.createElement("img");
-  img.className = "astra-coach__img";
-  img.src = "/static/img/astra_saludo.png";
-  img.onerror = () => (img.src = "/static/img/astra.png");
-  img.alt = "Astra";
-
-  const line = document.createElement("div");
-  line.className = "astra-coach__line";
-
-  const dot = document.createElement("div");
-  dot.className = "astra-coach__dot";
-
-  const bubble = document.createElement("div");
-  bubble.className = "astra-coach__bubble";
-  bubble.innerHTML = `
-    <div class="astra-coach__title">
-      <span>Astra</span>
-      <button class="astra-coach__close" title="Cerrar">×</button>
-    </div>
-
-    <div class="astra-coach__msg">…</div>
-
-    <div class="astra-coach__footer">
-      <button type="button" class="btn btn-outline-light btn-sm astra-coach__back">Atras</button>
-      <div class="astra-coach__dots">1/4</div>
-      <button type="button" class="btn btn-light btn-sm astra-coach__next">Siguiente</button>
-    </div>
-  `;
-
-  bubble.querySelector(".astra-coach__close")?.addEventListener("click", () => hideCoach(true));
-  bubble.querySelector(".astra-coach__back")?.addEventListener("click", () => tourPrev());
-  bubble.querySelector(".astra-coach__next")?.addEventListener("click", () => tourNext());
-
-  root.appendChild(dim);
-  root.appendChild(line);
-  root.appendChild(dot);
-  root.appendChild(img);
-  root.appendChild(bubble);
-  document.body.appendChild(root);
-
-  coach = {
-    root,
-    dim,
-    img,
-    bubble,
-    line,
-    dot,
-    msg: bubble.querySelector(".astra-coach__msg"),
-    dots: bubble.querySelector(".astra-coach__dots"),
-    btnBack: bubble.querySelector(".astra-coach__back"),
-    btnNext: bubble.querySelector(".astra-coach__next"),
-    _cleanup: null,
-  };
-
-  return coach;
-}
-
-function setCoachPose(pose = "point") {
-  const c = ensureCoach();
-  const mapPose = {
-    saludo: "/static/img/astra_saludo.png",
-    point: "/static/img/astra_point.png",
-    checklist: "/static/img/astra_checklist.png",
-    exit: "/static/img/astra_exit.png",
-  };
-  c.img.src = mapPose[pose] || mapPose.point;
-
-  // tamaños por pose (para que “se sienta” mas grande/afuera)
-  const wByPose = { saludo: 420, point: 460, checklist: 430, exit: 420 };
-  c.img.style.width = `${wByPose[pose] || 440}px`;
-}
-
-function clearCoachTargetHighlight() {
-  if (coachLastTarget) coachLastTarget.classList.remove("astra-coach--target");
-  coachLastTarget = null;
-}
-
-function applyCoachTargetHighlight(targetEl) {
-  clearCoachTargetHighlight();
-  if (!targetEl) return;
-  targetEl.classList.add("astra-coach--target");
-  coachLastTarget = targetEl;
-}
-
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
-}
-
-function positionCoachToTarget(targetEl) {
-  const c = ensureCoach();
-  const pad = 12;
-
-  const r = targetEl.getBoundingClientRect();
-  const cx = r.left + r.width / 2;
-  const cy = r.top + r.height / 2;
-
-  // medir burbuja (ya con texto renderizado)
-  c.bubble.style.visibility = "hidden";
-  c.bubble.style.left = `${pad}px`;
-  c.bubble.style.top = `${pad}px`;
-  const bw = c.bubble.offsetWidth || 320;
-  const bh = c.bubble.offsetHeight || 140;
-  c.bubble.style.visibility = "visible";
-
-  // candidatos para burbuja
-  const candidates = [
-    { name: "right",  x: r.right + 16,      y: cy - bh / 2 },
-    { name: "left",   x: r.left - bw - 16,  y: cy - bh / 2 },
-    { name: "top",    x: cx - bw / 2,       y: r.top - bh - 16 },
-    { name: "bottom", x: cx - bw / 2,       y: r.bottom + 16 },
-  ];
-
-  function fits(x, y) {
-    return (
-      x >= pad &&
-      y >= pad &&
-      x + bw <= window.innerWidth - pad &&
-      y + bh <= window.innerHeight - pad
-    );
+      /* Highlight target */
+      .astra-coach--target {
+        outline: 2px solid rgba(255,255,255,.22);
+        box-shadow: 0 0 0 8px rgba(88,166,255,.12);
+        border-radius: 14px;
+        position: relative;
+        z-index: 1000000;
+      }
+    `;
+    document.head.appendChild(st);
   }
 
-  let chosen = candidates.find(ca => fits(ca.x, ca.y)) || candidates[0];
-
-  // clamp final
-  const bx = clamp(chosen.x, pad, window.innerWidth - bw - pad);
-  const by = clamp(chosen.y, pad, window.innerHeight - bh - pad);
-
-  c.bubble.style.left = `${bx}px`;
-  c.bubble.style.top = `${by}px`;
-
-  // colocar dot en el target
-  c.dot.style.left = `${cx - 5}px`;
-  c.dot.style.top = `${cy - 5}px`;
-
-  // linea desde burbuja hacia target (desde punto mas cercano)
-  const bcx = bx + bw / 2;
-  const bcy = by + bh / 2;
-
-  const dx = cx - bcx;
-  const dy = cy - bcy;
-  const ang = Math.atan2(dy, dx);
-  const len = Math.max(40, Math.hypot(dx, dy) - 18);
-
-  c.line.style.left = `${bcx}px`;
-  c.line.style.top = `${bcy}px`;
-  c.line.style.width = `${len}px`;
-  c.line.style.transform = `rotate(${ang}rad)`;
-
-  // Astra: “afuera” pegada a la burbuja (lado opuesto al target)
-  // si la burbuja va a la derecha del target, Astra va mas hacia la izquierda (y viceversa)
-  const imgW = parseFloat(getComputedStyle(c.img).width) || 440;
-  const imgH = imgW * 1.05; // aprox (no perfecto, pero sirve para placement)
-
-  let ax = bx - imgW * 0.55;
-  let ay = by + bh * 0.85;
-
-  if (chosen.name === "left") {
-    ax = bx + bw + imgW * 0.05;
-    ay = by + bh * 0.85;
-  }
-  if (chosen.name === "top") {
-    ax = bx - imgW * 0.45;
-    ay = by + bh + imgH * 0.10;
-  }
-  if (chosen.name === "bottom") {
-    ax = bx - imgW * 0.45;
-    ay = by - imgH * 0.10;
+  // --------------------------
+  // Role helpers
+  // --------------------------
+  function getRoleSafe() {
+    try {
+      if (typeof A.getRole === "function") {
+        const r = String(A.getRole() || "").toLowerCase().trim();
+        if (r) return r;
+      }
+    } catch {}
+    try { if (typeof isAdmin === "function" && isAdmin()) return "admin"; } catch {}
+    const role = (A?.state?.user?.role || A?.state?.role || "").toLowerCase().trim();
+    return role || "ies";
   }
 
-  // permitimos que se salga un poco por los bordes para el look “afuera”
-  ax = clamp(ax, -60, window.innerWidth + 60);
-  ay = clamp(ay, -60, window.innerHeight + 60);
+  // --------------------------
+  // DOM helpers
+  // --------------------------
+  function qs(sel) { return document.querySelector(sel); }
 
-  c.img.style.left = `${ax}px`;
-  c.img.style.top = `${ay}px`;
-}
-
-function showCoach({ target, text, pose = "point", step = 1, total = 4, autoCloseMs = 0 } = {}) {
-  if (!target) return;
-  const c = ensureCoach();
-
-  // cleanup previo (evita listeners acumulados)
-  c._cleanup?.();
-  c._cleanup = null;
-
-  clearTimeout(coachTimer);
-
-  setCoachPose(pose);
-  c.msg.textContent = text || "";
-
-  c.dots.textContent = `${step}/${total}`;
-  c.btnBack.disabled = step <= 1;
-  c.btnNext.textContent = step >= total ? "Finalizar" : "Siguiente";
-
-  c.root.style.display = "block";
-
-  applyCoachTargetHighlight(target);
-  positionCoachToTarget(target);
-
-  const onMove = () => {
-    if (c.root.style.display !== "block") return;
-    if (!coachLastTarget) return;
-    positionCoachToTarget(coachLastTarget);
-  };
-
-  window.addEventListener("resize", onMove, { passive: true });
-  window.addEventListener("scroll", onMove, { passive: true });
-
-  c._cleanup = () => {
-    window.removeEventListener("resize", onMove);
-    window.removeEventListener("scroll", onMove);
-  };
-
-  if (autoCloseMs && autoCloseMs > 0) {
-    coachTimer = setTimeout(() => hideCoach(false), autoCloseMs);
+  function pickTarget(candidates = []) {
+    for (const c of candidates) {
+      const el = typeof c === "string" ? qs(c) : c;
+      if (el) return el;
+    }
+    return null; // OJO: no devolvemos body aqui (eso vuelve "modal" el coach)
   }
-}
 
-function hideCoach(markDone = false) {
-  if (!coach) return;
-  clearTimeout(coachTimer);
+  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
-  coach.root.style.display = "none";
-  coach._cleanup?.();
-  coach._cleanup = null;
-
-  clearCoachTargetHighlight();
-
-  if (markDone) {
-    try { localStorage.setItem(COACH_KEY, "1"); } catch {}
+  function scrollIntoViewSmart(el) {
+    try {
+      el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+    } catch {}
   }
-}
 
-function shouldAutoCoach() {
-  try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
-}
+  // --------------------------
+  // Coach DOM
+  // --------------------------
+  function ensureCoach() {
+    if (coach) return coach;
 
-// -------------------- TOUR (4 PASOS) --------------------
-function getTourSteps() {
-  const total = 4;
+    injectCoachStylesOnce();
 
-  const field = document.getElementById("subprogramasField");
-  const firstSubp = field?.querySelector(".subp-node");
-  const adminBar = document.getElementById("adminIesBar");
-  const iesSelect = document.getElementById("iesSelect");
-  const btnResumenGlobal = document.getElementById("btnResumenGlobal");
-  const btnVerResumen = document.getElementById("btnVerResumen");
-  const offcanvas = document.getElementById("submodsCanvas");
+    const root = document.createElement("div");
+    root.className = "astra-coach";
+    root.style.display = "none";
 
-  if (isAdminSafe()) {
+    const dim = document.createElement("div");
+    dim.className = "astra-coach__dim";
+    dim.addEventListener("click", () => hideCoach(false));
+
+    const line = document.createElement("div");
+    line.className = "astra-coach__line";
+
+    const dot = document.createElement("div");
+    dot.className = "astra-coach__dot";
+
+    const img = document.createElement("img");
+    img.className = "astra-coach__img";
+    img.src = "/static/img/astra_saludo.png";
+    img.onerror = () => (img.src = "/static/img/astra.png");
+    img.alt = "Astra";
+
+    const bubble = document.createElement("div");
+    bubble.className = "astra-coach__bubble";
+    bubble.innerHTML = `
+      <div class="astra-coach__title">
+        <span>Astra</span>
+        <button class="astra-coach__close" title="Cerrar">×</button>
+      </div>
+
+      <div class="astra-coach__msg">…</div>
+
+      <div class="astra-coach__footer">
+        <button type="button" class="astra-coach__btn astra-coach__back">Atras</button>
+        <div class="astra-coach__dots">1/4</div>
+        <button type="button" class="astra-coach__btn astra-coach__btn--primary astra-coach__next">Siguiente</button>
+      </div>
+    `;
+
+    bubble.querySelector(".astra-coach__close")?.addEventListener("click", () => hideCoach(true));
+    bubble.querySelector(".astra-coach__back")?.addEventListener("click", () => tourPrev());
+    bubble.querySelector(".astra-coach__next")?.addEventListener("click", () => tourNext());
+
+    root.appendChild(dim);
+    root.appendChild(line);
+    root.appendChild(dot);
+    root.appendChild(img);
+    root.appendChild(bubble);
+    document.body.appendChild(root);
+
+    coach = {
+      root, dim, line, dot, img, bubble,
+      msg: bubble.querySelector(".astra-coach__msg"),
+      dots: bubble.querySelector(".astra-coach__dots"),
+      btnBack: bubble.querySelector(".astra-coach__back"),
+      btnNext: bubble.querySelector(".astra-coach__next"),
+      _cleanup: null,
+    };
+
+    return coach;
+  }
+
+  function setCoachPose(pose = "point") {
+    const c = ensureCoach();
+    const mapPose = {
+      saludo: "/static/img/astra_saludo.png",
+      point: "/static/img/astra_point.png",
+      checklist: "/static/img/astra_checklist.png",
+      exit: "/static/img/astra_exit.png",
+    };
+    c.img.src = mapPose[pose] || mapPose.point;
+
+    const wByPose = { saludo: 410, point: 450, checklist: 420, exit: 410 };
+    c.img.style.width = `${wByPose[pose] || 430}px`;
+  }
+
+  function clearCoachTargetHighlight() {
+    if (coachLastTarget) coachLastTarget.classList.remove("astra-coach--target");
+    coachLastTarget = null;
+  }
+
+  function applyCoachTargetHighlight(targetEl) {
+    clearCoachTargetHighlight();
+    if (!targetEl) return;
+    targetEl.classList.add("astra-coach--target");
+    coachLastTarget = targetEl;
+  }
+
+  function positionCoachToTarget(targetEl) {
+    const c = ensureCoach();
+    const pad = 10;
+
+    const r = targetEl.getBoundingClientRect();
+    const cx = r.left + r.width / 2;
+    const cy = r.top + r.height / 2;
+
+    // medir burbuja real
+    c.bubble.style.visibility = "hidden";
+    c.bubble.style.left = `${pad}px`;
+    c.bubble.style.top = `${pad}px`;
+    const bw = c.bubble.offsetWidth || 280;
+    const bh = c.bubble.offsetHeight || 130;
+    c.bubble.style.visibility = "visible";
+
+    // candidatos (pegados al target)
+    const candidates = [
+      { name: "right",  x: r.right + 14,     y: cy - bh / 2 },
+      { name: "left",   x: r.left - bw - 14, y: cy - bh / 2 },
+      { name: "bottom", x: cx - bw / 2,      y: r.bottom + 14 },
+      { name: "top",    x: cx - bw / 2,      y: r.top - bh - 14 },
+    ];
+
+    function fits(x, y) {
+      return (
+        x >= pad &&
+        y >= pad &&
+        x + bw <= window.innerWidth - pad &&
+        y + bh <= window.innerHeight - pad
+      );
+    }
+
+    let chosen = candidates.find(o => fits(o.x, o.y)) || candidates[0];
+
+    const bx = clamp(chosen.x, pad, window.innerWidth - bw - pad);
+    const by = clamp(chosen.y, pad, window.innerHeight - bh - pad);
+
+    c.bubble.style.left = `${bx}px`;
+    c.bubble.style.top = `${by}px`;
+
+    // punto en target
+    c.dot.style.left = `${cx - 5}px`;
+    c.dot.style.top = `${cy - 5}px`;
+
+    // linea desde centro burbuja a target
+    const bcx = bx + bw / 2;
+    const bcy = by + bh / 2;
+    const dx = cx - bcx;
+    const dy = cy - bcy;
+    const ang = Math.atan2(dy, dx);
+    const len = Math.max(40, Math.hypot(dx, dy) - 18);
+
+    c.line.style.left = `${bcx}px`;
+    c.line.style.top = `${bcy}px`;
+    c.line.style.width = `${len}px`;
+    c.line.style.transform = `rotate(${ang}rad)`;
+
+    // Astra: anclada al target (no a la burbuja), para que siempre "apunte" a lo que toca
+    const imgW = parseFloat(getComputedStyle(c.img).width) || 430;
+    const imgH = imgW * 1.05;
+
+    let ax = cx - imgW * 0.70;
+    let ay = cy + imgH * 0.35;
+
+    // ajusta segun lado elegido para que no tape la burbuja
+    if (chosen.name === "left")  ax = cx + imgW * 0.55;
+    if (chosen.name === "right") ax = cx - imgW * 0.70;
+    if (chosen.name === "top")   ay = cy + imgH * 0.55;
+    if (chosen.name === "bottom") ay = cy - imgH * 0.35;
+
+    // permite que se salga un poco (look "afuera"), pero evita que tape el cuadro
+    ax = clamp(ax, -80, window.innerWidth + 80);
+    ay = clamp(ay, -80, window.innerHeight + 80);
+
+    c.img.style.left = `${ax}px`;
+    c.img.style.top = `${ay}px`;
+  }
+
+  function showCoach({ target, text, pose = "point", step = 1, total = 4, autoCloseMs = 0 } = {}) {
+    const c = ensureCoach();
+
+    // cleanup previo (evita listeners acumulados)
+    c._cleanup?.();
+    c._cleanup = null;
+
+    clearTimeout(coachTimer);
+
+    // si no hay target real => no mostramos (evita modo "modal")
+    if (!target) return;
+
+    setCoachPose(pose);
+    c.msg.textContent = text || "";
+
+    c.dots.textContent = `${step}/${total}`;
+    c.btnBack.disabled = step <= 1;
+    c.btnNext.textContent = step >= total ? "Finalizar" : "Siguiente";
+
+    c.root.style.display = "block";
+
+    applyCoachTargetHighlight(target);
+
+    // centra viewport en el target para que no se vaya a esquinas raras
+    scrollIntoViewSmart(target);
+
+    // posiciona luego de un frame (por si cambian tamaños por scroll)
+    requestAnimationFrame(() => positionCoachToTarget(target));
+
+    const onMove = () => {
+      if (c.root.style.display !== "block") return;
+      if (!coachLastTarget) return;
+      positionCoachToTarget(coachLastTarget);
+    };
+
+    window.addEventListener("resize", onMove, { passive: true });
+    window.addEventListener("scroll", onMove, { passive: true });
+
+    c._cleanup = () => {
+      window.removeEventListener("resize", onMove);
+      window.removeEventListener("scroll", onMove);
+    };
+
+    if (autoCloseMs && autoCloseMs > 0) {
+      coachTimer = setTimeout(() => hideCoach(false), autoCloseMs);
+    }
+  }
+
+  function hideCoach(markDone = false) {
+    if (!coach) return;
+    clearTimeout(coachTimer);
+
+    coach.root.style.display = "none";
+    coach._cleanup?.();
+    coach._cleanup = null;
+
+    clearCoachTargetHighlight();
+
+    if (markDone) {
+      try { localStorage.setItem(COACH_KEY, "1"); } catch {}
+    }
+  }
+
+  function shouldAutoCoach() {
+    try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
+  }
+
+  // --------------------------
+  // Steps (con BEFORE para asegurar targets)
+  // --------------------------
+  function tryOpenOffcanvas(offcanvasEl) {
+    if (!offcanvasEl) return;
+    // Bootstrap Offcanvas si existe
+    try {
+      if (window.bootstrap?.Offcanvas) {
+        window.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
+      }
+    } catch {}
+    // fallback: agrega clase show si tu UI lo usa (no rompe si no existe)
+    try { offcanvasEl.classList.add("show"); } catch {}
+  }
+
+  function getTourSteps() {
+    const role = getRoleSafe();
+
+    const field = document.getElementById("subprogramasField");
+    const firstSubp = field?.querySelector(".subp-node");
+    const adminBar = document.getElementById("adminIesBar");
+    const iesSelect = document.getElementById("iesSelect");
+    const btnResumenGlobal = document.getElementById("btnResumenGlobal");
+    const btnVerResumen = document.getElementById("btnVerResumen");
+    const offcanvas = document.getElementById("submodsCanvas") || document.getElementById("submodulosList");
+
+    if (role === "admin") {
+      return [
+        {
+          pose: "saludo",
+          text: "Hola 👋 Soy Astra. Te guio en 4 pasos.",
+          target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar", ".astra-brand"]),
+        },
+        {
+          pose: "point",
+          text: "Paso 1: selecciona una IES para ver y gestionar su informacion.",
+          target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar"]),
+        },
+        {
+          pose: "checklist",
+          text: "Paso 2: abre el Resumen general para revisar avance, evidencias y responsables.",
+          target: () => pickTarget([btnResumenGlobal, "#btnResumenGlobal", btnVerResumen, "#btnVerResumen"]),
+        },
+        {
+          pose: "exit",
+          text: "Listo. Si quieres ver esta guia otra vez, usa el boton Guia.",
+          target: () => pickTarget(["#btnGuide", ".astra-brand", btnResumenGlobal]),
+        },
+      ];
+    }
+
+    // IES
     return [
       {
         pose: "saludo",
-        text: "Hola 👋 Soy Astra. Te voy a guiar en 4 pasos rapidos.",
-        target: document.querySelector(".astra-brand") || field || document.body,
+        text: "Hola 👋 Soy Astra. Te muestro como usar ASTRA en 4 pasos.",
+        target: () => pickTarget(["#subprogramasField .subp-node", firstSubp, field, ".astra-brand"]),
       },
       {
         pose: "point",
-        text: "Paso 1: como Admin, primero selecciona una IES aqui para ver/gestionar su informacion.",
-        target: iesSelect || adminBar || field || document.body,
+        text: "Paso 1: haz clic en un subprograma para ver sus submodulos.",
+        target: () => pickTarget(["#subprogramasField .subp-node", firstSubp, field]),
       },
       {
         pose: "checklist",
-        text: "Paso 2: explora los subprogramas (constelacion). Al dar click se abre el panel de submodulos.",
-        target: firstSubp || field || document.body,
+        text: "Paso 2: se abre el panel derecho. Elige un submodulo para abrir la Operativa y registrar evidencias.",
+        before: () => {
+          // si no hay panel abierto, intentamos abrirlo con el primer subprograma
+          if (firstSubp) {
+            try { firstSubp.click(); } catch {}
+          }
+          tryOpenOffcanvas(document.getElementById("submodsCanvas"));
+        },
+        target: () => pickTarget([offcanvas, "#submodsCanvas", "#submodulosList"]),
       },
       {
         pose: "exit",
-        text: "Paso 3: desde el panel, entra a operativa o abre el resumen. (Tambien tienes 'Resumen general' arriba).",
-        target: btnVerResumen || offcanvas || btnResumenGlobal || field || document.body,
+        text: "Paso 3: usa 'Ver resumen' para revisar el avance cuando quieras. Listo.",
+        target: () => pickTarget([btnVerResumen, "#btnVerResumen", offcanvas, field]),
       },
     ];
   }
 
-  return [
-    {
-      pose: "saludo",
-      text: "Hola 👋 Soy Astra. Bienvenido. Te muestro como usar ASTRA en 4 pasos.",
-      target: document.querySelector(".astra-brand") || field || document.body,
-    },
-    {
-      pose: "point",
-      text: "Paso 1: elige un subprograma en la constelacion para ver sus submodulos.",
-      target: firstSubp || field || document.body,
-    },
-    {
-      pose: "checklist",
-      text: "Paso 2: en el panel lateral selecciona un submodulo para abrir la operativa y registrar evidencias.",
-      target: offcanvas || document.body,
-    },
-    {
-      pose: "exit",
-      text: "Paso 3: cuando quieras, usa 'Ver resumen' para revisar el avance del submodulo.",
-      target: btnVerResumen || document.body,
-    },
-  ].map((s, i) => ({ ...s, _i: i + 1, _total: total }));
-}
+  function renderTourStep() {
+    const steps = getTourSteps();
+    const total = steps.length;
+    const s = steps[Math.max(0, Math.min(coachStep, total - 1))];
 
-function renderTourStep() {
-  const steps = getTourSteps();
-  const total = steps.length;
-  const s = steps[Math.max(0, Math.min(coachStep, total - 1))];
+    // asegura UI necesaria antes de buscar target
+    try { s.before?.(); } catch {}
 
-  showCoach({
-    target: s.target,
-    pose: s.pose,
-    text: s.text,
-    step: coachStep + 1,
-    total,
-  });
-}
-
-function tourStart() {
-  coachStep = 0;
-  renderTourStep();
-}
-
-function tourNext() {
-  const steps = getTourSteps();
-  if (coachStep >= steps.length - 1) {
-    hideCoach(true);
-    return;
+    // deja que el DOM respire (para que aparezca el panel si lo abres)
+    setTimeout(() => {
+      const target = (typeof s.target === "function") ? s.target() : s.target;
+      showCoach({
+        target,
+        pose: s.pose,
+        text: s.text,
+        step: coachStep + 1,
+        total,
+      });
+    }, 60);
   }
-  coachStep += 1;
-  renderTourStep();
-}
 
-function tourPrev() {
-  if (coachStep <= 0) return;
-  coachStep -= 1;
-  renderTourStep();
-}
+  function tourStart() {
+    coachStep = 0;
+    renderTourStep();
+  }
 
-// expone para boton "Guia"
-window.ASTRA = window.ASTRA || {};
-window.ASTRA.openGuide = function () {
-  tourStart();
-};
+  function tourNext() {
+    const steps = getTourSteps();
+    if (coachStep >= steps.length - 1) {
+      hideCoach(true);
+      return;
+    }
+    coachStep += 1;
+    renderTourStep();
+  }
 
-// auto-onboarding 1 vez (solo una vez real)
-(function initAutoCoachOnce() {
-  if (window.__astraCoachAutoInit) return;
-  window.__astraCoachAutoInit = true;
+  function tourPrev() {
+    if (coachStep <= 0) return;
+    coachStep -= 1;
+    renderTourStep();
+  }
 
+  // API boton "Guia"
+  A.openGuide = function () {
+    tourStart();
+  };
+
+  // Auto-onboarding (solo 1 vez)
   document.addEventListener("DOMContentLoaded", () => {
     if (shouldAutoCoach()) {
-      setTimeout(() => {
-        try { tourStart(); } catch {}
-      }, 350);
+      setTimeout(() => { try { tourStart(); } catch {} }, 350);
     }
   });
 })();
-
-// ============================================================
-// TOUR (4 pasos) — Admin + IES
-// ============================================================
-function getTourRole() {
-  const A = window.ASTRA || {};
-  const r0 = (typeof A.getRole === "function" ? A.getRole() : "") || "";
-  const r = String(r0).toLowerCase().trim();
-  if (r === "admin") return "admin";
-  if (r === "ies" || r === "cliente") return "ies";
-  return r || "ies";
-}
-
-function pickTarget(selectors = []) {
-  for (const sel of selectors) {
-    const el = typeof sel === "string" ? document.querySelector(sel) : sel;
-    if (el) return el;
-  }
-  return document.body;
-}
-
-function getTourSteps() {
-  const role = getTourRole();
-
-  // elementos comunes
-  const btnGuide = document.getElementById("btnGuide");
-  const btnResumenGlobal = document.getElementById("btnResumenGlobal");
-  const field = document.getElementById("subprogramasField");
-  const canvas = document.getElementById("submodsCanvas");
-  const iesSelect = document.getElementById("iesSelect");
-  const btnLogout = document.getElementById("btnLogout");
-
-  if (role === "admin") {
-    return [
-      {
-        pose: "saludo",
-        target: pickTarget([iesSelect, "#iesSelect", btnGuide, "#btnGuide"]),
-        text: "Hola 👋 Soy Astra. Primero selecciona una IES para ver su información.",
-      },
-      {
-        pose: "point",
-        target: pickTarget([btnResumenGlobal, "#btnResumenGlobal"]),
-        text: "Luego abre el Resumen general para revisar avance, evidencias y responsables por submódulo.",
-      },
-      {
-        pose: "checklist",
-        target: pickTarget(["#adminIesBar", iesSelect, btnGuide]),
-        text: "Tip: puedes buscar IES por nombre/slug y cambiar entre instituciones sin perder el control.",
-      },
-      {
-        pose: "exit",
-        target: pickTarget([btnGuide, "#btnGuide", btnLogout, "#btnLogout"]),
-        text: "Listo. Si necesitas repasar, toca Guía cuando quieras.",
-      },
-    ];
-  }
-
-  // IES
-  return [
-    {
-      pose: "saludo",
-      target: pickTarget(["#subprogramasField .subp-node", field, btnGuide]),
-      text: "Bienvenido 👋 Elige un subprograma para empezar.",
-    },
-    {
-      pose: "point",
-      target: pickTarget([canvas, "#submodsCanvas", "#submodulosList", field]),
-      text: "Se abrirá el panel de submódulos. Selecciona uno para abrir la Operativa y registrar evidencias.",
-    },
-    {
-      pose: "checklist",
-      target: pickTarget([btnGuide, "#btnGuide"]),
-      text: "Recomendado: cambia tu clave provisional en tu apartado de cuenta (seguridad).",
-    },
-    {
-      pose: "exit",
-      target: pickTarget([btnLogout, "#btnLogout", btnGuide, "#btnGuide"]),
-      text: "Listo. Usa Guía cuando quieras repasar estos pasos.",
-    },
-  ];
-}
-
-function renderTourStep(idx) {
-  const steps = getTourSteps();
-  const c = ensureCoach();
-
-  coachStep = Math.max(0, Math.min(steps.length - 1, Number(idx) || 0));
-  const step = steps[coachStep];
-
-  if (c.dots) c.dots.textContent = `${coachStep + 1}/${steps.length}`;
-  if (c.btnBack) c.btnBack.disabled = coachStep === 0;
-
-  if (c.btnNext) {
-    c.btnNext.textContent = coachStep === steps.length - 1 ? "Terminar" : "Siguiente";
-  }
-
-  showCoach({
-    target: step.target,
-    pose: step.pose,
-    text: step.text,
-    autoCloseMs: 0,
-  });
-}
-
-function tourNext() {
-  const steps = getTourSteps();
-  if (coachStep >= steps.length - 1) {
-    hideCoach(true);
-    return;
-  }
-  renderTourStep(coachStep + 1);
-}
-
-function tourPrev() {
-  renderTourStep(coachStep - 1);
-}
-
-// ============================================================
-// API pública para botón "Guía" + auto-onboarding
-// (pon esto donde ya tengas A.openGuide; o reemplázalo)
-// ============================================================
-(function bindGuideApi() {
-  const A = (window.ASTRA = window.ASTRA || {});
-  A.openGuide = function () {
-    renderTourStep(0);
-  };
-})();
-
-// ============================================================
-// TOUR 4 PASOS
-// ============================================================
-function getTourSteps() {
-  const firstNode = () => field?.querySelector(".subp-node");
-  const canvasTarget = () => document.getElementById("submodsCanvas") || firstNode() || field || document.body;
-  const operativaTarget = () => operativaPanel || field || document.body;
-  const exitTarget = () => btnReset || field || document.body;
-
-  return [
-    {
-      pose: "saludo",
-      text:
-        "Hola, soy Astra. Te guio rapido:\n" +
-        "1) Elige un subprograma\n" +
-        "2) Abre un submodulo\n" +
-        "3) Llena evidencias en Operativa\n" +
-        "4) Revisa Resumen cuando quieras.",
-      target: () => document.querySelector(".stage-kicker") || firstNode() || field || document.body,
-    },
-    {
-      pose: "point",
-      text: "Paso 1: Haz clic en un subprograma para ver sus submodulos.",
-      target: () => firstNode() || field || document.body,
-    },
-    {
-      pose: "checklist",
-      text:
-        "Paso 2: Se abre el panel derecho.\n" +
-        "Elige un submodulo para abrir la Operativa y registrar evidencias.",
-      target: () => canvasTarget(),
-    },
-    {
-      pose: "exit",
-      text:
-        "Listo.\n" +
-        "Si quieres ver esta guia otra vez, usa el boton Guia.",
-      target: () => exitTarget(),
-    },
-  ];
-}
-
-function renderTourUI() {
-  const c = ensureCoach();
-  const steps = getTourSteps();
-  const total = steps.length;
-
-  if (c.dots) c.dots.textContent = `${coachStep + 1}/${total}`;
-  if (c.btnBack) c.btnBack.disabled = coachStep === 0;
-  if (c.btnNext) c.btnNext.textContent = coachStep === total - 1 ? "Terminar" : "Siguiente";
-}
-
-function tourShowStep(i) {
-  const steps = getTourSteps();
-  const idx = Math.max(0, Math.min(steps.length - 1, i));
-  coachStep = idx;
-
-  const s = steps[idx];
-  const targetEl = s.target?.();
-  const safeTarget = targetEl || field || document.body;
-
-  renderTourUI();
-
-  showCoach({
-    target: safeTarget,
-    pose: s.pose,
-    text: s.text,
-    autoCloseMs: 0,
-  });
-}
-
-function tourNext() {
-  const steps = getTourSteps();
-  if (coachStep >= steps.length - 1) {
-    hideCoach(true); // marca como visto en auto-onboarding
-    return;
-  }
-  tourShowStep(coachStep + 1);
-}
-
-function tourPrev() {
-  if (coachStep <= 0) return;
-  tourShowStep(coachStep - 1);
-}
-
-function startTour({ markDoneAtEnd = true } = {}) {
-  coachStep = 0;
-  tourShowStep(0);
-
-  // Si es manual, no queremos marcarlo "visto" al terminar
-  // (por eso en A.openGuide usamos markDoneAtEnd:false y al terminar solo cierra)
-  if (!markDoneAtEnd) {
-    // hack simple: cuando llegue a Terminar, que no marque done
-    const originalHide = hideCoach;
-    hideCoach = function (markDone) {
-      originalHide(false);
-      hideCoach = originalHide;
-    };
-  }
-}
-
-// expone para boton "Guia"
-A.openGuide = function () {
-  if (!isIES()) return;
-  startTour({ markDoneAtEnd: false });
-};
 
 
   // ============================================================
