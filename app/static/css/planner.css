@@ -314,20 +314,11 @@
 .subm-hint{ margin: 6px 0 0; font-size: 11px; color: rgba(235,240,255,.66); }
 
 /* =========================================================
-   ASTRA ASSISTANT UI (TOASTS + COACH OVERLAY)
-   - Mantén este bloque al FINAL para prioridad
-========================================================= */
-
-/* ---------- Toasts ----------
-   ✅ Eliminado: estilos duplicados de toast (ya están en index)
-*/
-
-/* =========================================================
-   COACH ASTRA (V3) - compatible con planner.js nuevo
+   COACH ASTRA (V3) - compatible con planner.js
    OBJETIVO:
    - NO modal gigante
    - burbuja mini
-   - no usar !important innecesario
+   - Astra NO enorme y NO tapada
    - soporta line/dot y (si existe) arrow viejo sin romper
 ========================================================= */
 
@@ -339,16 +330,16 @@
   background: transparent; /* clave: sin modal gigante */
 }
 
-/* si tu JS crea dim, esto controla el overlay */
+/* Si tu JS crea dim (opcional), esto controla el overlay */
 .astra-coach__dim{
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.22);
+  background: rgba(0,0,0,.14);      /* mas suave */
   backdrop-filter: blur(2px);
   pointer-events: auto;
 }
 
-/* posicionables */
+/* Elementos posicionables */
 .astra-coach__img,
 .astra-coach__bubble,
 .astra-coach__line,
@@ -359,31 +350,40 @@
   top: 0;
 }
 
-/* highlight del target */
+/* Highlight del target */
 .astra-coach--target{
-  outline: 2px solid rgba(140,160,255,.75);
+  outline: 2px solid rgba(140,160,255,.65);
   box-shadow:
-    0 0 0 8px rgba(140,160,255,.12),
+    0 0 0 8px rgba(140,160,255,.10),
     0 18px 55px rgba(0,0,0,.35);
   border-radius: 18px;
   position: relative;
   z-index: 1000000;
 }
 
-/* Astra */
+/* ==========================
+   Astra (FIX: no gigante + no tapa)
+========================== */
 .astra-coach__img{
-  width: 440px;
+  width: 240px;                       /* antes 440 */
   height: auto;
   pointer-events: none;
   transform: translate(-50%,-50%);
-  filter: drop-shadow(0 18px 40px rgba(0,0,0,.65));
-  z-index: 2;
+  filter: drop-shadow(0 16px 34px rgba(0,0,0,.55));
+  z-index: 1;                         /* SIEMPRE debajo de bubble */
+  opacity: .96;
 }
 
-/* burbuja mini */
+/* ==========================
+   Burbuja mini real
+========================== */
 .astra-coach__bubble{
   width: min(280px, calc(100vw - 20px));
   max-width: 280px;
+
+  max-height: 190px;                  /* controla tamaño */
+  overflow: hidden;                   /* scroll lo maneja msg */
+
   padding: 10px 12px;
   border-radius: 16px;
   background: rgba(10,14,28,.92);
@@ -408,17 +408,20 @@
   align-items: center;
 }
 
-/* mensaje con scroll mini */
+/* Mensaje con scroll mini */
 .astra-coach__msg{
   font-size: 12.5px;
   line-height: 1.35;
   margin: 0;
-  max-height: 110px;
+
+  max-height: 92px;                   /* antes 110 */
   overflow-y: auto;
   padding-right: 6px;
+
   overflow-wrap: anywhere;
   word-break: break-word;
 }
+
 .astra-coach__msg::-webkit-scrollbar{ width: 8px; }
 .astra-coach__msg::-webkit-scrollbar-thumb{
   background: rgba(255,255,255,.12);
@@ -429,11 +432,11 @@
   border-radius: 999px;
 }
 
-/* close */
+/* Close */
 .astra-coach__close{
-  width: 26px;
-  height: 26px;
-  border-radius: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 12px;
   border: 1px solid rgba(255,255,255,.14);
   background: rgba(255,255,255,.06);
   color: rgba(255,255,255,.90);
@@ -444,19 +447,23 @@
 }
 .astra-coach__close:hover{ background: rgba(255,255,255,.10); }
 
-/* arrow legacy (si algún JS viejo lo usa) */
+/* ==========================
+   Arrow legacy (si JS viejo lo usa)
+========================== */
 .astra-coach__arrow{
-  width: 16px;
-  height: 16px;
+  width: 12px;                        /* mas pequeño */
+  height: 12px;
   transform: rotate(45deg);
   background: rgba(10,14,28,.92);
-  border-left: 1px solid rgba(255,255,255,.12);
-  border-top: 1px solid rgba(255,255,255,.12);
+  border-left: 1px solid rgba(255,255,255,.14);
+  border-top: 1px solid rgba(255,255,255,.14);
   pointer-events: none;
   z-index: 3;
 }
 
-/* line/dot (JS V3) */
+/* ==========================
+   Line / Dot (JS V3)
+========================== */
 .astra-coach__line{
   height: 2px;
   background: rgba(255,255,255,.35);
@@ -465,25 +472,31 @@
   pointer-events: none;
   z-index: 3;
 }
+
 .astra-coach__dot{
   width: 10px;
   height: 10px;
   border-radius: 999px;
   background: rgba(255,255,255,.65);
-  box-shadow: 0 0 0 7px rgba(88,166,255,.16);
+  box-shadow: 0 0 0 7px rgba(88,166,255,.14);
   pointer-events: none;
   z-index: 3;
 }
 
+/* ==========================
+   Responsive
+========================== */
 @media (max-width: 520px){
-  .astra-coach__img{ width: 240px; }
+  .astra-coach__img{ width: 180px; }   /* antes 240 */
   .astra-coach__bubble{
-    width: min(290px, calc(100vw - 20px));
-    max-width: 290px;
+    width: min(260px, calc(100vw - 20px));
+    max-width: 260px;
+    max-height: 210px;
   }
-  .astra-coach__msg{ max-height: 130px; }
+  .astra-coach__msg{ max-height: 110px; }
 }
 
+/* Reduce motion */
 @media (prefers-reduced-motion: reduce){
   .subp-node,
   .subm-item{
