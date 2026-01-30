@@ -503,3 +503,81 @@
     transition: none !important;
   }
 }
+/* =========================================================
+   COACH ASTRA - EXTRA (V4)
+   - estilos faltantes del footer/botones
+   - z-index consistente
+   - highlight estable incluso dentro de offcanvas/modals
+========================================================= */
+
+/* Asegura stacking correcto */
+.astra-coach { z-index: 999999; }
+.astra-coach__dim { z-index: 0; }
+.astra-coach__img { z-index: 1; }
+.astra-coach__line,
+.astra-coach__dot,
+.astra-coach__arrow { z-index: 2; }
+.astra-coach__bubble { z-index: 4; }
+
+/* Target highlight: que SI se vea por encima */
+.astra-coach--target{
+  position: relative;
+  z-index: 1000000;
+  scroll-margin: 120px;
+}
+
+/* Footer (botones + contador) */
+.astra-coach__footer{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.astra-coach__dots{
+  font-size: 11px;
+  color: rgba(235,240,255,.70);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.04);
+  white-space: nowrap;
+}
+
+/* Botones */
+.astra-coach__btn{
+  appearance: none;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06);
+  color: rgba(235,240,255,.92);
+  border-radius: 12px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+
+.astra-coach__btn:hover{
+  transform: translateY(-1px);
+  background: rgba(255,255,255,.10);
+  border-color: rgba(140,160,255,.35);
+}
+
+.astra-coach__btn:disabled{
+  opacity: .45;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Boton primario (Siguiente / Finalizar) */
+.astra-coach__btn--primary{
+  border-color: rgba(140,160,255,.45);
+  background: rgba(140,160,255,.16);
+}
+
+.astra-coach__btn--primary:hover{
+  border-color: rgba(140,160,255,.70);
+  background: rgba(140,160,255,.22);
+}
