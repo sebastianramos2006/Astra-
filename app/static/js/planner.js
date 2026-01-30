@@ -555,80 +555,88 @@ const canvas =
   window.hideCoach = hideCoach;
   window.shouldAutoCoach = shouldAutoCoach;
 
-  // --------------------------
-  // TOUR (4 pasos)
-  // --------------------------
-  function tryOpenOffcanvas(offcanvasEl) {
-    if (!offcanvasEl) return;
-    try {
-      if (window.bootstrap?.Offcanvas) {
-        window.bootstrap.Offcanvas.getOrCreateInstance(offcanvasEl).show();
-      }
-    } catch {}
-    try { offcanvasEl.classList.add("show"); } catch {}
-  }
 
+  // --------------------------
+  // TOUR (simple, sin abrir paneles)
+  // --------------------------
   function getTourSteps() {
     const role = getRoleSafe();
 
     const field = document.getElementById("subprogramasField");
-    const firstSubp = field?.querySelector(".subp-node");
+    const firstSubp = field ? field.querySelector(".subp-node") : null;
+
     const adminBar = document.getElementById("adminIesBar");
     const iesSelect = document.getElementById("iesSelect");
+
     const btnResumenGlobal = document.getElementById("btnResumenGlobal");
+    const btnReset = document.getElementById("btnReset");
+    const btnGuide = document.getElementById("btnGuide");
     const btnVerResumen = document.getElementById("btnVerResumen");
-    const offcanvas = document.getElementById("submodsCanvas") || document.getElementById("submodulosList");
+
+    // fallbacks seguros (si no hay targets visibles)
+    const safeHomeTarget = () =>
+      pickTarget([firstSubp, "#subprogramasField", ".constellation", ".astra-brand"]) ||
+      document.querySelector(".astra-brand") ||
+      document.body;
+
+    const safeBtnTarget = () =>
+      pickTarget([btnReset, "#btnReset", btnGuide, "#btnGuide", ".astra-brand"]) ||
+      document.querySelector(".astra-brand") ||
+      document.body;
 
     if (role === "admin") {
       return [
         {
           pose: "saludo",
-          text: "Hola 👋 Soy Astra. Te guio en 4 pasos.",
-          target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar", ".astra-brand"]),
+          text: "Hola 👋 Soy Astra. Guia rapida en 4 pasos.",
+          target: () =>
+            pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar", ".astra-brand"]) ||
+            safeBtnTarget(),
         },
         {
           pose: "point",
-          text: "Paso 1: selecciona una IES para ver y gestionar su informacion.",
-          target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar"]),
+          text: "Paso 1: selecciona una IES (arriba) para ver su informacion.",
+          target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar"]) || safeBtnTarget(),
         },
         {
           pose: "checklist",
-          text: "Paso 2: abre el Resumen general para revisar avance y evidencias.",
-          target: () => pickTarget([btnResumenGlobal, "#btnResumenGlobal"]),
+          text: "Paso 2: entra a Resumen general para ver avances y evidencias.",
+          target: () => pickTarget([btnResumenGlobal, "#btnResumenGlobal"]) || safeBtnTarget(),
         },
         {
           pose: "exit",
           text: "Listo. Si quieres ver esta guia otra vez, usa el boton Guia.",
-          target: () => pickTarget(["#btnGuide", btnResumenGlobal, ".astra-brand"]),
+          target: () => pickTarget([btnGuide, "#btnGuide", btnResumenGlobal, ".astra-brand"]) || safeBtnTarget(),
         },
       ];
     }
 
-    // IES
+    // IES (cliente): NO abrimos panel, NO hacemos click, solo indicamos
     return [
       {
         pose: "saludo",
-        text: "Hola 👋 Soy Astra. Te muestro como usar ASTRA en 4 pasos.",
-        target: () => pickTarget(["#subprogramasField .subp-node", firstSubp, field, ".astra-brand"]),
+        text: "Hola 👋 Soy Astra. Te muestro como usar ASTRA rapido.",
+        target: () => safeHomeTarget(),
       },
       {
         pose: "point",
         text: "Paso 1: haz clic en un subprograma para ver sus submodulos.",
-        target: () => pickTarget(["#subprogramasField .subp-node", firstSubp, field]),
+        target: () => pickTarget([firstSubp, "#subprogramasField .subp-node", field]) || safeHomeTarget(),
       },
       {
         pose: "checklist",
-        text: "Paso 2: se abre el panel derecho. Elige un submodulo para registrar evidencias.",
-        before: () => {
-          if (firstSubp) { try { firstSubp.click(); } catch {} }
-          tryOpenOffcanvas(document.getElementById("submodsCanvas"));
-        },
-        target: () => pickTarget([offcanvas, "#submodsCanvas", "#submodulosList"]),
+        text: "Paso 2: cuando se abra el panel derecho, elige un submodulo para registrar evidencias.",
+        target: () =>
+          pickTarget(["#submodsCanvas", "#submodulosList"]) ||
+          pickTarget([firstSubp, field]) ||
+          safeHomeTarget(),
       },
       {
         pose: "exit",
-        text: "Paso 3: usa 'Ver resumen' para revisar el avance cuando quieras.",
-        target: () => pickTarget([btnVerResumen, "#btnVerResumen", offcanvas, field]),
+        text: "Paso 3: luego usa 'Ver resumen' para revisar el avance cuando quieras.",
+        target: () =>
+          pickTarget([btnVerResumen, "#btnVerResumen", btnReset, "#btnReset", btnGuide, "#btnGuide"]) ||
+          safeBtnTarget(),
       },
     ];
   }
@@ -636,20 +644,22 @@ const canvas =
   function renderTourStep() {
     const steps = getTourSteps();
     const total = steps.length;
-    const s = steps[Math.max(0, Math.min(coachStep, total - 1))];
+    const idx = Math.max(0, Math.min(coachStep, total - 1));
+    const s = steps[idx];
 
-    try { s.before?.(); } catch {}
-
+    // NO before() => nunca abre paneles ni hace clicks
     setTimeout(() => {
       const target = (typeof s.target === "function") ? s.target() : s.target;
+      const fallback = document.querySelector(".astra-brand") || document.body;
+
       showCoach({
-        target,
+        target: target || fallback,
         pose: s.pose,
         text: s.text,
-        step: coachStep + 1,
+        step: idx + 1,
         total,
       });
-    }, 80);
+    }, 60);
   }
 
   function tourStart() {
@@ -677,27 +687,22 @@ const canvas =
   A.openGuide = function () { tourStart(); };
 
   // Si existe el botón, lo cableamos (sin duplicar)
-  const btnGuide = document.getElementById("btnGuide");
-  if (btnGuide && !btnGuide.dataset.wiredGuide) {
-    btnGuide.dataset.wiredGuide = "1";
-    btnGuide.addEventListener("click", (ev) => {
+  const btnGuideEl = document.getElementById("btnGuide");
+  if (btnGuideEl && !btnGuideEl.dataset.wiredGuide) {
+    btnGuideEl.dataset.wiredGuide = "1";
+    btnGuideEl.addEventListener("click", (ev) => {
       ev.preventDefault();
       tourStart();
     });
   }
 
   // Auto onboarding (solo 1 vez)
+  // planner.js ya corre en DOMContentLoaded, NO metas otro listener
   function autoStartIfNeeded() {
     if (!shouldAutoCoach()) return;
     setTimeout(() => { try { tourStart(); } catch {} }, 350);
   }
-
-  // Estamos dentro de DOMContentLoaded (planner.js), pero por seguridad:
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", autoStartIfNeeded, { once: true });
-  } else {
-    autoStartIfNeeded();
-  }
+  autoStartIfNeeded();
 })();
 
 
