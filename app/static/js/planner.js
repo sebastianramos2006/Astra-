@@ -206,6 +206,7 @@ function toastCompat({
 
 // ============================================================
 //  Coach Astra (TOUR 4 pasos + 4 imagenes) - Admin + IES
+//  FIX UI: burbuja pequena + Astra afuera + linea al objetivo
 // ============================================================
 const COACH_KEY = "astra_onboarding_v2_done"; // v2: se muestra 1 vez aunque ya viste v1
 let coach = null;
@@ -219,39 +220,108 @@ function injectCoachStylesOnce() {
   st.id = "astraCoachStyles";
   st.textContent = `
     .astra-coach { position: fixed; inset: 0; z-index: 9999; pointer-events: none; }
-    .astra-coach__img { position: fixed; width: 300px; height: auto; filter: drop-shadow(0 14px 30px rgba(0,0,0,.60)); pointer-events: none; transform: translate(-50%, -50%); }
-    .astra-coach__bubble { position: fixed; max-width: 360px; padding: 12px 12px; border-radius: 14px; background: rgba(10,14,28,.88); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 18px 44px rgba(0,0,0,.45); color: rgba(255,255,255,.92); font-size: 13px; line-height: 1.35; pointer-events: auto; backdrop-filter: blur(10px); }
-    .astra-coach__title { font-weight: 800; font-size: 12px; opacity: .95; margin-bottom: 6px; display:flex; justify-content: space-between; gap: 8px; align-items: center; }
-    .astra-coach__close { width: 28px; height: 28px; border-radius: 10px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06); color: rgba(255,255,255,.85); cursor: pointer; }
+    .astra-coach__dim {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.30);
+      backdrop-filter: blur(2px);
+      pointer-events: auto;
+    }
+
+    /* Astra grande y "afuera" */
+    .astra-coach__img {
+      position: fixed;
+      width: 420px;
+      height: auto;
+      filter: drop-shadow(0 18px 40px rgba(0,0,0,.65));
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      user-select: none;
+    }
+
+    /* burbuja compacta */
+    .astra-coach__bubble {
+      position: fixed;
+      width: min(320px, calc(100vw - 24px));
+      padding: 10px 12px;
+      border-radius: 16px;
+      background: rgba(10,14,28,.92);
+      border: 1px solid rgba(255,255,255,.14);
+      box-shadow: 0 18px 44px rgba(0,0,0,.50);
+      color: rgba(255,255,255,.92);
+      font-size: 13px;
+      line-height: 1.35;
+      pointer-events: auto;
+      backdrop-filter: blur(12px);
+    }
+
+    .astra-coach__title {
+      font-weight: 800;
+      font-size: 12px;
+      opacity: .95;
+      margin-bottom: 6px;
+      display:flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .astra-coach__close {
+      width: 28px; height: 28px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      color: rgba(255,255,255,.85);
+      cursor: pointer;
+    }
     .astra-coach__close:hover { background: rgba(255,255,255,.10); }
-    .astra-coach__arrow { position: fixed; width: 14px; height: 14px; transform: rotate(45deg); background: rgba(10,14,28,.88); border-left: 1px solid rgba(255,255,255,.12); border-top: 1px solid rgba(255,255,255,.12); pointer-events: none; }
-    .astra-coach__footer { display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top:10px; }
+
+    /* linea que apunta al target */
+    .astra-coach__line {
+      position: fixed;
+      height: 2px;
+      background: rgba(255,255,255,.35);
+      box-shadow: 0 0 0 1px rgba(0,0,0,.20);
+      transform-origin: 0 50%;
+      pointer-events: none;
+    }
+    .astra-coach__dot {
+      position: fixed;
+      width: 10px; height: 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,.65);
+      box-shadow: 0 0 0 6px rgba(88,166,255,.18);
+      pointer-events: none;
+    }
+
+    .astra-coach__footer {
+      display:flex;
+      gap:10px;
+      justify-content:space-between;
+      align-items:center;
+      margin-top:10px;
+    }
     .astra-coach__dots { opacity:.75; font-size:12px; }
 
     /* resaltado del objetivo */
     .astra-coach--target {
       outline: 2px solid rgba(255,255,255,.22);
-      box-shadow: 0 0 0 6px rgba(88,166,255,.10);
+      box-shadow: 0 0 0 7px rgba(88,166,255,.12);
       border-radius: 14px;
+      position: relative;
+      z-index: 10000;
     }
   `;
   document.head.appendChild(st);
 }
 
 function isAdminSafe() {
-  try {
-    if (typeof isAdmin === "function") return !!isAdmin();
-  } catch {}
-  // fallback por si no existe isAdmin()
+  try { if (typeof isAdmin === "function") return !!isAdmin(); } catch {}
   const role = (window.ASTRA?.state?.user?.role || window.ASTRA?.state?.role || "").toLowerCase();
   return role === "admin";
 }
 
 function isIESSafe() {
-  try {
-    if (typeof isIES === "function") return !!isIES();
-  } catch {}
-  // fallback: si no es admin, lo tratamos como IES
+  try { if (typeof isIES === "function") return !!isIES(); } catch {}
   return !isAdminSafe();
 }
 
@@ -264,18 +334,24 @@ function ensureCoach() {
   root.className = "astra-coach";
   root.style.display = "none";
 
+  const dim = document.createElement("div");
+  dim.className = "astra-coach__dim";
+  dim.addEventListener("click", () => hideCoach(false)); // click fuera cierra
+
   const img = document.createElement("img");
   img.className = "astra-coach__img";
   img.src = "/static/img/astra_saludo.png";
   img.onerror = () => (img.src = "/static/img/astra.png");
   img.alt = "Astra";
 
+  const line = document.createElement("div");
+  line.className = "astra-coach__line";
+
+  const dot = document.createElement("div");
+  dot.className = "astra-coach__dot";
+
   const bubble = document.createElement("div");
   bubble.className = "astra-coach__bubble";
-
-  const arrow = document.createElement("div");
-  arrow.className = "astra-coach__arrow";
-
   bubble.innerHTML = `
     <div class="astra-coach__title">
       <span>Astra</span>
@@ -295,20 +371,25 @@ function ensureCoach() {
   bubble.querySelector(".astra-coach__back")?.addEventListener("click", () => tourPrev());
   bubble.querySelector(".astra-coach__next")?.addEventListener("click", () => tourNext());
 
+  root.appendChild(dim);
+  root.appendChild(line);
+  root.appendChild(dot);
   root.appendChild(img);
-  root.appendChild(arrow);
   root.appendChild(bubble);
   document.body.appendChild(root);
 
   coach = {
     root,
+    dim,
     img,
     bubble,
-    arrow,
+    line,
+    dot,
     msg: bubble.querySelector(".astra-coach__msg"),
     dots: bubble.querySelector(".astra-coach__dots"),
     btnBack: bubble.querySelector(".astra-coach__back"),
     btnNext: bubble.querySelector(".astra-coach__next"),
+    _cleanup: null,
   };
 
   return coach;
@@ -323,6 +404,10 @@ function setCoachPose(pose = "point") {
     exit: "/static/img/astra_exit.png",
   };
   c.img.src = mapPose[pose] || mapPose.point;
+
+  // tamaños por pose (para que “se sienta” mas grande/afuera)
+  const wByPose = { saludo: 420, point: 460, checklist: 430, exit: 420 };
+  c.img.style.width = `${wByPose[pose] || 440}px`;
 }
 
 function clearCoachTargetHighlight() {
@@ -337,38 +422,107 @@ function applyCoachTargetHighlight(targetEl) {
   coachLastTarget = targetEl;
 }
 
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
 function positionCoachToTarget(targetEl) {
   const c = ensureCoach();
+  const pad = 12;
+
   const r = targetEl.getBoundingClientRect();
+  const cx = r.left + r.width / 2;
+  const cy = r.top + r.height / 2;
 
-  const tx = r.left + r.width * 0.65;
-  const ty = r.top + r.height * 0.40;
+  // medir burbuja (ya con texto renderizado)
+  c.bubble.style.visibility = "hidden";
+  c.bubble.style.left = `${pad}px`;
+  c.bubble.style.top = `${pad}px`;
+  const bw = c.bubble.offsetWidth || 320;
+  const bh = c.bubble.offsetHeight || 140;
+  c.bubble.style.visibility = "visible";
 
-  // Astra mas afuera y grande
-  const ax = Math.max(160, tx - 300);
-  const ay = Math.min(window.innerHeight - 180, ty + 110);
+  // candidatos para burbuja
+  const candidates = [
+    { name: "right",  x: r.right + 16,      y: cy - bh / 2 },
+    { name: "left",   x: r.left - bw - 16,  y: cy - bh / 2 },
+    { name: "top",    x: cx - bw / 2,       y: r.top - bh - 16 },
+    { name: "bottom", x: cx - bw / 2,       y: r.bottom + 16 },
+  ];
 
-  // burbuja cerca del target
-  const bx = Math.min(window.innerWidth - 380, tx + 120);
-  const by = Math.max(20, ty - 40);
+  function fits(x, y) {
+    return (
+      x >= pad &&
+      y >= pad &&
+      x + bw <= window.innerWidth - pad &&
+      y + bh <= window.innerHeight - pad
+    );
+  }
 
-  const arx = Math.min(window.innerWidth - 30, bx - 10);
-  const ary = Math.max(20, by + 18);
+  let chosen = candidates.find(ca => fits(ca.x, ca.y)) || candidates[0];
 
-  c.img.style.left = `${ax}px`;
-  c.img.style.top = `${ay}px`;
+  // clamp final
+  const bx = clamp(chosen.x, pad, window.innerWidth - bw - pad);
+  const by = clamp(chosen.y, pad, window.innerHeight - bh - pad);
 
   c.bubble.style.left = `${bx}px`;
   c.bubble.style.top = `${by}px`;
 
-  c.arrow.style.left = `${arx}px`;
-  c.arrow.style.top = `${ary}px`;
+  // colocar dot en el target
+  c.dot.style.left = `${cx - 5}px`;
+  c.dot.style.top = `${cy - 5}px`;
+
+  // linea desde burbuja hacia target (desde punto mas cercano)
+  const bcx = bx + bw / 2;
+  const bcy = by + bh / 2;
+
+  const dx = cx - bcx;
+  const dy = cy - bcy;
+  const ang = Math.atan2(dy, dx);
+  const len = Math.max(40, Math.hypot(dx, dy) - 18);
+
+  c.line.style.left = `${bcx}px`;
+  c.line.style.top = `${bcy}px`;
+  c.line.style.width = `${len}px`;
+  c.line.style.transform = `rotate(${ang}rad)`;
+
+  // Astra: “afuera” pegada a la burbuja (lado opuesto al target)
+  // si la burbuja va a la derecha del target, Astra va mas hacia la izquierda (y viceversa)
+  const imgW = parseFloat(getComputedStyle(c.img).width) || 440;
+  const imgH = imgW * 1.05; // aprox (no perfecto, pero sirve para placement)
+
+  let ax = bx - imgW * 0.55;
+  let ay = by + bh * 0.85;
+
+  if (chosen.name === "left") {
+    ax = bx + bw + imgW * 0.05;
+    ay = by + bh * 0.85;
+  }
+  if (chosen.name === "top") {
+    ax = bx - imgW * 0.45;
+    ay = by + bh + imgH * 0.10;
+  }
+  if (chosen.name === "bottom") {
+    ax = bx - imgW * 0.45;
+    ay = by - imgH * 0.10;
+  }
+
+  // permitimos que se salga un poco por los bordes para el look “afuera”
+  ax = clamp(ax, -60, window.innerWidth + 60);
+  ay = clamp(ay, -60, window.innerHeight + 60);
+
+  c.img.style.left = `${ax}px`;
+  c.img.style.top = `${ay}px`;
 }
 
 function showCoach({ target, text, pose = "point", step = 1, total = 4, autoCloseMs = 0 } = {}) {
   if (!target) return;
-
   const c = ensureCoach();
+
+  // cleanup previo (evita listeners acumulados)
+  c._cleanup?.();
+  c._cleanup = null;
+
   clearTimeout(coachTimer);
 
   setCoachPose(pose);
@@ -425,7 +579,6 @@ function shouldAutoCoach() {
 function getTourSteps() {
   const total = 4;
 
-  // targets
   const field = document.getElementById("subprogramasField");
   const firstSubp = field?.querySelector(".subp-node");
   const adminBar = document.getElementById("adminIesBar");
@@ -459,7 +612,6 @@ function getTourSteps() {
     ];
   }
 
-  // IES
   return [
     {
       pose: "saludo",
@@ -519,20 +671,25 @@ function tourPrev() {
   renderTourStep();
 }
 
-// expone para boton "Guia" (admin + IES)
-A.openGuide = function () {
+// expone para boton "Guia"
+window.ASTRA = window.ASTRA || {};
+window.ASTRA.openGuide = function () {
   tourStart();
 };
 
-// auto-onboarding 1 vez
-document.addEventListener("DOMContentLoaded", () => {
-  if (shouldAutoCoach()) {
-    // pequeño delay para que ya existan nodos
-    setTimeout(() => {
-      try { tourStart(); } catch {}
-    }, 350);
-  }
-});
+// auto-onboarding 1 vez (solo una vez real)
+(function initAutoCoachOnce() {
+  if (window.__astraCoachAutoInit) return;
+  window.__astraCoachAutoInit = true;
+
+  document.addEventListener("DOMContentLoaded", () => {
+    if (shouldAutoCoach()) {
+      setTimeout(() => {
+        try { tourStart(); } catch {}
+      }, 350);
+    }
+  });
+})();
 
 // ============================================================
 // TOUR (4 pasos) — Admin + IES
