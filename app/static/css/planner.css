@@ -581,3 +581,53 @@
   border-color: rgba(140,160,255,.70);
   background: rgba(140,160,255,.22);
 }
+/* =========================
+   COACH ASTRA - BASE FIX
+   (pegalo debajo de tu bloque actual)
+========================= */
+
+.astra-coach{
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+.astra-coach__dim{
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  pointer-events: auto;
+}
+
+.astra-coach__bubble{
+  position: fixed;
+  max-width: 360px;
+  min-width: 280px;
+  pointer-events: auto;
+}
+
+.astra-coach__img{
+  position: fixed;
+  pointer-events: none;
+  filter: drop-shadow(0 12px 28px rgba(0,0,0,.45));
+}
+
+.astra-coach__line{
+  position: fixed;
+  height: 2px;
+  transform-origin: left center;
+  background: rgba(140,160,255,.55);
+}
+
+.astra-coach__dot{
+  position: fixed;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(140,160,255,.95);
+  box-shadow: 0 0 0 6px rgba(140,160,255,.18);
+}
+
+.astra-target-ring{
+  border-radius: 16px;
+}

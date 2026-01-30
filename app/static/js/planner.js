@@ -57,6 +57,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   function isJwtLike(t) {
     return !!(t && String(t).split(".").length === 3);
   }
+
   // ============================================================
   // Auth gate
   // ============================================================
@@ -131,49 +132,45 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   // ============================================================
-  //  IMPORTANTE: sincroniza sesión YA
+  // Sincroniza sesión (si existe en core.js)
   // ============================================================
   try {
     if (typeof A.refreshSession === "function") {
       await A.refreshSession();
     }
   } catch (e) {
-    console.warn("refreshSession falló:", e);
-  }
-// ============================================================
-//  Toast COMPAT (planner.js -> core.js)
-// ============================================================
-function toastCompat({
-  title = "ASTRA",
-  msg = "",
-  message = "",
-  type = "info",
-  ms = 5200,
-  timeout = null,
-  sticky = false,
-  actions = [],
-} = {}) {
-  const map = { info: "info", success: "success", warning: "warn", danger: "error" };
-
-  const finalMessage = (message || msg || "").toString();
-  const finalTimeout = timeout ?? ms;
-
-  // usa el toast real del core si existe
-  if (typeof A.toast === "function") {
-    return A.toast({
-      type: map[type] || "info",
-      title,
-      message: finalMessage,
-      timeout: finalTimeout,
-      sticky,
-      actions,
-    });
+    console.warn("refreshSession fallo:", e);
   }
 
-  // fallback si por alguna razón no hay core.js
-  console.log(`[${type}] ${title}: ${finalMessage}`);
-}
+  // ============================================================
+  // Toast compat
+  // ============================================================
+  function toastCompat({
+    title = "ASTRA",
+    msg = "",
+    message = "",
+    type = "info",
+    ms = 5200,
+    timeout = null,
+    sticky = false,
+    actions = [],
+  } = {}) {
+    const map = { info: "info", success: "success", warning: "warn", danger: "error" };
+    const finalMessage = (message || msg || "").toString();
+    const finalTimeout = timeout ?? ms;
 
+    if (typeof A.toast === "function") {
+      return A.toast({
+        type: map[type] || "info",
+        title,
+        message: finalMessage,
+        timeout: finalTimeout,
+        sticky,
+        actions,
+      });
+    }
+    console.log(`[${type}] ${title}: ${finalMessage}`);
+  }
 
   // ============================================================
   // DOM
@@ -193,12 +190,11 @@ function toastCompat({
   const operativaPanel = qs("#operativaPanel");
   const resumenPanel = qs("#resumenPanel");
 
-const canvasEl = document.getElementById("submodsCanvas");
-const canvas =
-  canvasEl && window.bootstrap?.Offcanvas
-    ? window.bootstrap.Offcanvas.getOrCreateInstance(canvasEl)
-    : null;
-
+  const canvasEl = document.getElementById("submodsCanvas");
+  const canvas =
+    canvasEl && window.bootstrap?.Offcanvas
+      ? window.bootstrap.Offcanvas.getOrCreateInstance(canvasEl)
+      : null;
 
   const submodsMeta = qs("#submodsMeta");
   const submodsTitle = qs("#submodsCanvasLabel");
@@ -208,595 +204,620 @@ const canvas =
 
   const constellation = document.querySelector(".constellation");
 
-// ============================================================
-//  Coach Astra (TOUR 4 pasos + 4 imagenes) - Admin + IES (V4.3)
-//  - point: Astra mas a la izquierda para apuntar a la derecha
-//  - checklist: mas pequena y mas centrada en constelacion
-//  - exit: fallback robusto (si no existe, no desaparece)
-// ============================================================
-(function AstraCoachV43() {
-  if (window.__astraCoachV4) return;
-  window.__astraCoachV4 = true;
+  // ============================================================
+  // Coach Astra (V4.3) - FIX: highlight functions + robust images
+  // ============================================================
+  (function AstraCoachV43() {
+    if (window.__astraCoachV4) return;
+    window.__astraCoachV4 = true;
 
-  const A = (window.ASTRA = window.ASTRA || {});
-  const COACH_KEY = "astra_onboarding_v2_done";
+    const A = (window.ASTRA = window.ASTRA || {});
+    const COACH_KEY = "astra_onboarding_v2_done";
 
-  try {
-    document.querySelectorAll(".astra-coach").forEach((n) => n.remove());
-    document.querySelectorAll(".astra-virtual-target").forEach((n) => n.remove());
-  } catch {}
-
-  let coach = null;
-  let coachTimer = null;
-  let coachStep = 0;
-  let coachLastTarget = null;
-
-  function qsLocal(sel) { return document.querySelector(sel); }
-
-  function isVisible(el) {
-    if (!el) return false;
-
-    if (el.classList && el.classList.contains("astra-virtual-target")) {
-      const r = el.getBoundingClientRect();
-      return r.width > 0 && r.height > 0;
-    }
-
-    const cs = getComputedStyle(el);
-    if (cs.display === "none" || cs.visibility === "hidden") return false;
-    if (cs.opacity === "0") return false;
-
-    const rects = el.getClientRects();
-    return rects && rects.length > 0;
-  }
-
-  function pickTarget(candidates = []) {
-    for (const c of candidates) {
-      const el = typeof c === "string" ? qsLocal(c) : c;
-      if (el && isVisible(el)) return el;
-    }
-    return null;
-  }
-
-  function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
-
-  function scrollIntoViewSmart(el) {
-    try { el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" }); } catch {}
-  }
-
-  function getRoleSafe() {
     try {
-      if (typeof A.getRole === "function") {
-        const r = String(A.getRole() || "").toLowerCase().trim();
-        if (r) return r;
-      }
+      document.querySelectorAll(".astra-coach").forEach((n) => n.remove());
+      document.querySelectorAll(".astra-virtual-target").forEach((n) => n.remove());
+      document.querySelectorAll(".astra-target-ring").forEach((n) => n.remove());
     } catch {}
-    const role = String(A?.state?.user?.role || A?.state?.role || "").toLowerCase().trim();
-    return role || "ies";
-  }
 
-  function ensureVirtualTarget(id, rect) {
-    let el = document.getElementById(id);
-    if (!el) {
-      el = document.createElement("div");
-      el.id = id;
-      el.className = "astra-virtual-target";
-      el.style.position = "fixed";
-      el.style.zIndex = "9997";
-      el.style.pointerEvents = "none";
-      el.style.opacity = "0.001";
-      el.style.borderRadius = "14px";
-      document.body.appendChild(el);
+    let coach = null;
+    let coachTimer = null;
+    let coachStep = 0;
+    let coachLastTarget = null;
+
+    function qsLocal(sel) { return document.querySelector(sel); }
+
+    function isVisible(el) {
+      if (!el) return false;
+
+      if (el.classList && el.classList.contains("astra-virtual-target")) {
+        const r = el.getBoundingClientRect();
+        return r.width > 0 && r.height > 0;
+      }
+
+      const cs = getComputedStyle(el);
+      if (cs.display === "none" || cs.visibility === "hidden") return false;
+      if (cs.opacity === "0") return false;
+
+      const rects = el.getClientRects();
+      return rects && rects.length > 0;
     }
 
-    const vw = window.innerWidth || 1200;
-    const vh = window.innerHeight || 800;
-
-    const px = (val, total) => {
-      if (typeof val === "string" && val.trim().endsWith("%")) {
-        const p = parseFloat(val);
-        return (total * (Number.isFinite(p) ? p : 0)) / 100;
+    function pickTarget(candidates = []) {
+      for (const c of candidates) {
+        const el = typeof c === "string" ? qsLocal(c) : c;
+        if (el && isVisible(el)) return el;
       }
-      const n = Number(val);
-      return Number.isFinite(n) ? n : 0;
-    };
+      return null;
+    }
 
-    const left = px(rect.left, vw);
-    const top = px(rect.top, vh);
-    const width = px(rect.width, vw);
-    const height = px(rect.height, vh);
+    function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
-    el.style.left = `${left}px`;
-    el.style.top = `${top}px`;
-    el.style.width = `${Math.max(60, width)}px`;
-    el.style.height = `${Math.max(60, height)}px`;
+    function scrollIntoViewSmart(el) {
+      try { el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" }); } catch {}
+    }
 
-    return el;
-  }
+    function getRoleSafe() {
+      try {
+        if (typeof A.getRole === "function") {
+          const r = String(A.getRole() || "").toLowerCase().trim();
+          if (r) return r;
+        }
+      } catch {}
+      const role = String(A?.state?.user?.role || A?.state?.role || "").toLowerCase().trim();
+      return role || "ies";
+    }
 
-  function ensureCoach() {
-    if (coach) return coach;
-
-    const root = document.createElement("div");
-    root.className = "astra-coach";
-    root.style.display = "none";
-
-    const dim = document.createElement("div");
-    dim.className = "astra-coach__dim";
-    dim.addEventListener("click", () => hideCoach(false));
-
-    const line = document.createElement("div");
-    line.className = "astra-coach__line";
-
-    const dot = document.createElement("div");
-    dot.className = "astra-coach__dot";
-
-    const img = document.createElement("img");
-    img.className = "astra-coach__img";
-    img.alt = "Astra";
-
-    const bubble = document.createElement("div");
-    bubble.className = "astra-coach__bubble";
-    bubble.innerHTML = `
-      <div class="astra-coach__title">
-        <span>Astra</span>
-        <button class="astra-coach__close" title="Cerrar">×</button>
-      </div>
-
-      <div class="astra-coach__msg">…</div>
-
-      <div class="astra-coach__footer">
-        <button type="button" class="astra-coach__btn astra-coach__back">Atras</button>
-        <div class="astra-coach__dots">1/4</div>
-        <button type="button" class="astra-coach__btn astra-coach__btn--primary astra-coach__next">Siguiente</button>
-      </div>
-    `;
-
-    bubble.querySelector(".astra-coach__close")?.addEventListener("click", () => hideCoach(true));
-    bubble.querySelector(".astra-coach__back")?.addEventListener("click", () => tourPrev());
-    bubble.querySelector(".astra-coach__next")?.addEventListener("click", () => tourNext());
-
-    root.appendChild(dim);
-    root.appendChild(line);
-    root.appendChild(dot);
-    root.appendChild(img);
-    root.appendChild(bubble);
-    document.body.appendChild(root);
-
-    coach = {
-      root, dim, line, dot, img, bubble,
-      msg: bubble.querySelector(".astra-coach__msg"),
-      dots: bubble.querySelector(".astra-coach__dots"),
-      btnBack: bubble.querySelector(".astra-coach__back"),
-      btnNext: bubble.querySelector(".astra-coach__next"),
-      _cleanup: null,
-      currentPose: "point",
-    };
-
-    return coach;
-  }
- // -------- Poses / assets (EXIT robusto) --------
-function setCoachPose(pose = "point") {
-  const c = ensureCoach();
-  c.currentPose = pose;
-
-  const poseCandidates = {
-    saludo: [
-      "/static/img/astra_saludo.png",
-      "/static/img/astra_saludo.PNG",
-      "/static/img/astra_saludo.webp",
-      "/static/img/astra_saludo.jpg",
-      "/static/img/astra_saludo.jpeg",
-      "/static/img/astra_hello.png",
-    ],
-    point: [
-      "/static/img/astra_point.png",
-      "/static/img/astra_point.PNG",
-      "/static/img/astra_point.webp",
-      "/static/img/astra_point.jpg",
-      "/static/img/astra_point.jpeg",
-      "/static/img/astra_pointer.png",
-    ],
-    checklist: [
-      "/static/img/astra_checklist.png",
-      "/static/img/astra_checklist.PNG",
-      "/static/img/astra_checklist.webp",
-      "/static/img/astra_checklist.jpg",
-      "/static/img/astra_checklist.jpeg",
-      "/static/img/astra_lista.png",
-    ],
-    exit: [
-      "/static/img/astra_exit.png", // ✅ existe (200)
-      "/static/img/astra_exit.PNG",
-      "/static/img/astra_exit.webp",
-      "/static/img/astra_exit.jpg",
-      "/static/img/astra_exit.jpeg",
-      "/static/img/astra_salida.png",
-      "/static/img/astra_salida.webp",
-      "/static/img/astra_out.png",
-      "/static/img/astra_bye.png",
-    ],
-  };
-
-  const fallbacks = [
-    "/static/img/astra.png",
-    "/static/img/astra.webp",
-    "/static/img/astra.jpg",
-    "/static/img/astra_point.png", // ultima bala
-  ];
-
-  const list = [...(poseCandidates[pose] || poseCandidates.point), ...fallbacks];
-  let i = 0;
-
-  // limpia handlers anteriores
-  c.img.onerror = null;
-  c.img.onload = null;
-
-  const tryNext = () => {
-    i += 1;
-    if (i >= list.length) return;
-    c.img.src = list[i];
-  };
-
-  // ✅ al cargar, re-posiciona (sirve para exit)
-  c.img.onload = () => {
-    try {
-      if (coachLastTarget && c?.root?.style?.display === "block") {
-        requestAnimationFrame(() => positionCoachToTarget(coachLastTarget));
+    function ensureVirtualTarget(id, rect) {
+      let el = document.getElementById(id);
+      if (!el) {
+        el = document.createElement("div");
+        el.id = id;
+        el.className = "astra-virtual-target";
+        el.style.position = "fixed";
+        el.style.zIndex = "9997";
+        el.style.pointerEvents = "none";
+        el.style.opacity = "0.001";
+        el.style.borderRadius = "14px";
+        document.body.appendChild(el);
       }
-    } catch {}
-  };
 
-  c.img.onerror = () => tryNext();
-  c.img.src = list[i];
+      const vw = window.innerWidth || 1200;
+      const vh = window.innerHeight || 800;
 
-  // ✅ TAMAÑO UNIFICADO (todas iguales)
-  const vw = Math.max(320, window.innerWidth || 1200);
-  const UNIFIED_SIZE = vw < 520 ? 190 : vw < 900 ? 230 : 260;
+      const px = (val, total) => {
+        if (typeof val === "string" && val.trim().endsWith("%")) {
+          const p = parseFloat(val);
+          return (total * (Number.isFinite(p) ? p : 0)) / 100;
+        }
+        const n = Number(val);
+        return Number.isFinite(n) ? n : 0;
+      };
 
-  c.img.style.width = `${UNIFIED_SIZE}px`;
-  c.img.style.maxWidth = `${UNIFIED_SIZE}px`;
-  c.img.style.maxHeight = "46vh";
-  c.img.style.height = "auto";
-  c.img.style.objectFit = "contain";
-  c.img.style.display = "block";
-  c.img.style.opacity = "1";
-}
+      const left = px(rect.left, vw);
+      const top = px(rect.top, vh);
+      const width = px(rect.width, vw);
+      const height = px(rect.height, vh);
 
-// -------- Positioning (Astra placement va AQUI, no en setCoachPose) --------
-function positionCoachToTarget(targetEl) {
-  const c = ensureCoach();
-  const pad = 12;
-  if (!targetEl || !isVisible(targetEl)) return;
+      el.style.left = `${left}px`;
+      el.style.top = `${top}px`;
+      el.style.width = `${Math.max(60, width)}px`;
+      el.style.height = `${Math.max(60, height)}px`;
+      return el;
+    }
 
-  const r = targetEl.getBoundingClientRect();
-  const cx = r.left + r.width / 2;
-  const cy = r.top + r.height / 2;
+    // -------- Highlight FIX (no depende de z-index del target) --------
+    function getRing() {
+      let ring = document.querySelector(".astra-target-ring");
+      if (!ring) {
+        ring = document.createElement("div");
+        ring.className = "astra-target-ring";
+        ring.style.position = "fixed";
+        ring.style.zIndex = "999998";
+        ring.style.pointerEvents = "none";
+        ring.style.borderRadius = "16px";
+        ring.style.boxShadow = "0 0 0 2px rgba(140,160,255,.65), 0 0 0 10px rgba(140,160,255,.14)";
+        ring.style.opacity = "0";
+        ring.style.transition = "opacity 120ms ease";
+        document.body.appendChild(ring);
+      }
+      return ring;
+    }
 
-  // medir burbuja
-  c.bubble.style.visibility = "hidden";
-  c.bubble.style.left = `${pad}px`;
-  c.bubble.style.top = `${pad}px`;
-  const bw = c.bubble.offsetWidth || 320;
-  const bh = c.bubble.offsetHeight || 150;
-  c.bubble.style.visibility = "visible";
+    function applyCoachTargetHighlight(target) {
+      try {
+        document.querySelectorAll(".astra-coach--target").forEach((n) => n.classList.remove("astra-coach--target"));
+      } catch {}
 
-  // burbuja pegada al recuadro
-  const preferLeft = cx > window.innerWidth * 0.58;
+      if (!target) return;
 
-  const candidates = preferLeft
-    ? [
-        { name: "left", x: r.left - bw - 14, y: cy - bh / 2 },
-        { name: "right", x: r.right + 14, y: cy - bh / 2 },
-        { name: "bottom", x: cx - bw / 2, y: r.bottom + 14 },
-        { name: "top", x: cx - bw / 2, y: r.top - bh - 14 },
-      ]
-    : [
-        { name: "right", x: r.right + 14, y: cy - bh / 2 },
-        { name: "left", x: r.left - bw - 14, y: cy - bh / 2 },
-        { name: "bottom", x: cx - bw / 2, y: r.bottom + 14 },
-        { name: "top", x: cx - bw / 2, y: r.top - bh - 14 },
+      try { target.classList.add("astra-coach--target"); } catch {}
+
+      const ring = getRing();
+      try {
+        const r = target.getBoundingClientRect();
+        const pad = 6;
+        ring.style.left = `${Math.max(0, r.left - pad)}px`;
+        ring.style.top = `${Math.max(0, r.top - pad)}px`;
+        ring.style.width = `${Math.max(24, r.width + pad * 2)}px`;
+        ring.style.height = `${Math.max(24, r.height + pad * 2)}px`;
+        ring.style.opacity = "1";
+      } catch {
+        ring.style.opacity = "0";
+      }
+    }
+
+    function clearCoachTargetHighlight() {
+      try {
+        document.querySelectorAll(".astra-coach--target").forEach((n) => n.classList.remove("astra-coach--target"));
+      } catch {}
+      try {
+        const ring = document.querySelector(".astra-target-ring");
+        if (ring) ring.style.opacity = "0";
+      } catch {}
+    }
+
+    function ensureCoach() {
+      if (coach) return coach;
+
+      const root = document.createElement("div");
+      root.className = "astra-coach";
+      root.style.display = "none";
+
+      const dim = document.createElement("div");
+      dim.className = "astra-coach__dim";
+      dim.addEventListener("click", () => hideCoach(false));
+
+      const line = document.createElement("div");
+      line.className = "astra-coach__line";
+
+      const dot = document.createElement("div");
+      dot.className = "astra-coach__dot";
+
+      const img = document.createElement("img");
+      img.className = "astra-coach__img";
+      img.alt = "Astra";
+
+      const bubble = document.createElement("div");
+      bubble.className = "astra-coach__bubble";
+      bubble.innerHTML = `
+        <div class="astra-coach__title">
+          <span>Astra</span>
+          <button class="astra-coach__close" title="Cerrar">×</button>
+        </div>
+
+        <div class="astra-coach__msg">…</div>
+
+        <div class="astra-coach__footer">
+          <button type="button" class="astra-coach__btn astra-coach__back">Atras</button>
+          <div class="astra-coach__dots">1/4</div>
+          <button type="button" class="astra-coach__btn astra-coach__btn--primary astra-coach__next">Siguiente</button>
+        </div>
+      `;
+
+      bubble.querySelector(".astra-coach__close")?.addEventListener("click", () => hideCoach(true));
+      bubble.querySelector(".astra-coach__back")?.addEventListener("click", () => tourPrev());
+      bubble.querySelector(".astra-coach__next")?.addEventListener("click", () => tourNext());
+
+      root.appendChild(dim);
+      root.appendChild(line);
+      root.appendChild(dot);
+      root.appendChild(img);
+      root.appendChild(bubble);
+      document.body.appendChild(root);
+
+      coach = {
+        root, dim, line, dot, img, bubble,
+        msg: bubble.querySelector(".astra-coach__msg"),
+        dots: bubble.querySelector(".astra-coach__dots"),
+        btnBack: bubble.querySelector(".astra-coach__back"),
+        btnNext: bubble.querySelector(".astra-coach__next"),
+        _cleanup: null,
+        currentPose: "point",
+      };
+
+      return coach;
+    }
+
+    // -------- Poses / assets --------
+    function setCoachPose(pose = "point") {
+      const c = ensureCoach();
+      c.currentPose = pose;
+
+      const poseCandidates = {
+        saludo: [
+          "/static/img/astra_saludo.png",
+          "/static/img/astra_saludo.PNG",
+          "/static/img/astra_saludo.webp",
+          "/static/img/astra_saludo.jpg",
+          "/static/img/astra_saludo.jpeg",
+          "/static/img/astra_hello.png",
+        ],
+        point: [
+          "/static/img/astra_point.png",
+          "/static/img/astra_point.PNG",
+          "/static/img/astra_point.webp",
+          "/static/img/astra_point.jpg",
+          "/static/img/astra_point.jpeg",
+          "/static/img/astra_pointer.png",
+        ],
+        checklist: [
+          "/static/img/astra_checklist.png",
+          "/static/img/astra_checklist.PNG",
+          "/static/img/astra_checklist.webp",
+          "/static/img/astra_checklist.jpg",
+          "/static/img/astra_checklist.jpeg",
+          "/static/img/astra_lista.png",
+        ],
+        exit: [
+          "/static/img/astra_exit.png",
+          "/static/img/astra_exit.PNG",
+          "/static/img/astra_exit.webp",
+          "/static/img/astra_exit.jpg",
+          "/static/img/astra_exit.jpeg",
+          "/static/img/astra_salida.png",
+          "/static/img/astra_out.png",
+          "/static/img/astra_bye.png",
+        ],
+      };
+
+      const fallbacks = [
+        "/static/img/astra.png",
+        "/static/img/astra.webp",
+        "/static/img/astra.jpg",
+        "/static/img/astra_point.png",
       ];
 
-  const fits = (x, y) =>
-    x >= pad &&
-    y >= pad &&
-    x + bw <= window.innerWidth - pad &&
-    y + bh <= window.innerHeight - pad;
+      const list = [...(poseCandidates[pose] || poseCandidates.point), ...fallbacks];
+      let i = 0;
 
-  const chosen = candidates.find((o) => fits(o.x, o.y)) || candidates[0];
+      c.img.onerror = null;
+      c.img.onload = null;
 
-  const bx = clamp(chosen.x, pad, window.innerWidth - bw - pad);
-  const by = clamp(chosen.y, pad, window.innerHeight - bh - pad);
+      const tryNext = () => {
+        i += 1;
+        if (i >= list.length) return;
+        c.img.src = list[i];
+      };
 
-  c.bubble.style.left = `${bx}px`;
-  c.bubble.style.top = `${by}px`;
+      c.img.onload = () => {
+        try {
+          if (coachLastTarget && c?.root?.style?.display === "block") {
+            requestAnimationFrame(() => positionCoachToTarget(coachLastTarget));
+          }
+        } catch {}
+      };
 
-  // dot y linea
-  c.dot.style.left = `${cx - 5}px`;
-  c.dot.style.top = `${cy - 5}px`;
+      c.img.onerror = () => tryNext();
+      c.img.src = list[i];
 
-  const bcx = bx + bw / 2;
-  const bcy = by + bh / 2;
-  const dx = cx - bcx;
-  const dy = cy - bcy;
-  const ang = Math.atan2(dy, dx);
-  const len = Math.max(45, Math.hypot(dx, dy) - 18);
+      const vw = Math.max(320, window.innerWidth || 1200);
+      const UNIFIED_SIZE = vw < 520 ? 190 : vw < 900 ? 230 : 260;
 
-  c.line.style.left = `${bcx}px`;
-  c.line.style.top = `${bcy}px`;
-  c.line.style.width = `${len}px`;
-  c.line.style.transform = `rotate(${ang}rad)`;
-
-  // -------- Astra placement por pose --------
-  const imgW = parseFloat(getComputedStyle(c.img).width) || 240;
-  const imgH = imgW * 1.05;
-
-  let ax = cx;
-  let ay = cy;
-
-  // 1) POINT: mas a la derecha (menos offset negativo)
-  if (c.currentPose === "point") {
-    ax = cx - (imgW * 0.95);
-    ay = cy + (imgH * 0.10);
-  }
-
-  // 2) CHECKLIST: mas centrada en constelacion
-  else if (c.currentPose === "checklist") {
-    const cons = document.querySelector(".constellation") || document.getElementById("subprogramasField");
-    if (cons && isVisible(cons)) {
-      const cr = cons.getBoundingClientRect();
-      const ccx = cr.left + cr.width * 0.52;
-      const ccy = cr.top + cr.height * 0.58;
-
-      ax = ccx - (imgW * 0.88);
-      ay = ccy - (imgH * 0.25);
-    } else {
-      ax = cx - (imgW * 0.95);
-      ay = cy - (imgH * 0.10);
+      c.img.style.width = `${UNIFIED_SIZE}px`;
+      c.img.style.maxWidth = `${UNIFIED_SIZE}px`;
+      c.img.style.maxHeight = "46vh";
+      c.img.style.height = "auto";
+      c.img.style.objectFit = "contain";
+      c.img.style.display = "block";
+      c.img.style.opacity = "1";
     }
-  }
 
-  // 3) SALUDO
-  else if (c.currentPose === "saludo") {
-    ax = cx - (imgW * 0.90);
-    ay = cy + (imgH * 0.08);
-  }
+    function positionCoachToTarget(targetEl) {
+      const c = ensureCoach();
+      const pad = 12;
+      if (!targetEl || !isVisible(targetEl)) return;
 
-  // 4) EXIT
-  else if (c.currentPose === "exit") {
-    ax = cx - (imgW * 0.92);
-    ay = cy + (imgH * 0.10);
-  }
+      coachLastTarget = targetEl;
 
-  // 5) otros: opuesto a burbuja
-  else {
-    const offX = imgW * 1.05;
-    const offY = imgH * 0.20;
+      const r = targetEl.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
 
-    if (chosen.name === "left")  { ax = cx + offX; ay = cy + offY; }
-    if (chosen.name === "right") { ax = cx - offX; ay = cy + offY; }
-    if (chosen.name === "top")   { ax = cx - imgW * 0.20; ay = cy + imgH * 0.70; }
-    if (chosen.name === "bottom"){ ax = cx - imgW * 0.20; ay = cy - imgH * 0.40; }
-  }
+      c.bubble.style.visibility = "hidden";
+      c.bubble.style.left = `${pad}px`;
+      c.bubble.style.top = `${pad}px`;
+      const bw = c.bubble.offsetWidth || 320;
+      const bh = c.bubble.offsetHeight || 150;
+      c.bubble.style.visibility = "visible";
 
-  ax = clamp(ax, -80, window.innerWidth + 80);
-  ay = clamp(ay, -80, window.innerHeight + 80);
+      const preferLeft = cx > window.innerWidth * 0.58;
+      const candidates = preferLeft
+        ? [
+            { name: "left", x: r.left - bw - 14, y: cy - bh / 2 },
+            { name: "right", x: r.right + 14, y: cy - bh / 2 },
+            { name: "bottom", x: cx - bw / 2, y: r.bottom + 14 },
+            { name: "top", x: cx - bw / 2, y: r.top - bh - 14 },
+          ]
+        : [
+            { name: "right", x: r.right + 14, y: cy - bh / 2 },
+            { name: "left", x: r.left - bw - 14, y: cy - bh / 2 },
+            { name: "bottom", x: cx - bw / 2, y: r.bottom + 14 },
+            { name: "top", x: cx - bw / 2, y: r.top - bh - 14 },
+          ];
 
-  c.img.style.left = `${ax}px`;
-  c.img.style.top = `${ay}px`;
-}
+      const fits = (x, y) =>
+        x >= pad &&
+        y >= pad &&
+        x + bw <= window.innerWidth - pad &&
+        y + bh <= window.innerHeight - pad;
 
-// -------- Public show/hide --------
-function showCoach({ target, text, pose = "point", step = 1, total = 4, autoCloseMs = 0 } = {}) {
-  const c = ensureCoach();
+      const chosen = candidates.find((o) => fits(o.x, o.y)) || candidates[0];
 
-  c._cleanup?.();
-  c._cleanup = null;
+      const bx = clamp(chosen.x, pad, window.innerWidth - bw - pad);
+      const by = clamp(chosen.y, pad, window.innerHeight - bh - pad);
 
-  clearTimeout(coachTimer);
+      c.bubble.style.left = `${bx}px`;
+      c.bubble.style.top = `${by}px`;
 
-  if (!target || !isVisible(target)) return;
+      c.dot.style.left = `${cx - 5}px`;
+      c.dot.style.top = `${cy - 5}px`;
 
-  setCoachPose(pose);
-  c.msg.textContent = text || "";
-  c.dots.textContent = `${step}/${total}`;
-  c.btnBack.disabled = step <= 1;
-  c.btnNext.textContent = step >= total ? "Finalizar" : "Siguiente";
+      const bcx = bx + bw / 2;
+      const bcy = by + bh / 2;
+      const dx = cx - bcx;
+      const dy = cy - bcy;
+      const ang = Math.atan2(dy, dx);
+      const len = Math.max(45, Math.hypot(dx, dy) - 18);
 
-  c.root.style.display = "block";
-  applyCoachTargetHighlight(target);
+      c.line.style.left = `${bcx}px`;
+      c.line.style.top = `${bcy}px`;
+      c.line.style.width = `${len}px`;
+      c.line.style.transform = `rotate(${ang}rad)`;
 
-  if (!target.classList?.contains("astra-virtual-target")) {
-    scrollIntoViewSmart(target);
-  }
+      const imgW = parseFloat(getComputedStyle(c.img).width) || 240;
+      const imgH = imgW * 1.05;
 
-  requestAnimationFrame(() => positionCoachToTarget(target));
+      let ax = cx;
+      let ay = cy;
 
-  const onMove = () => {
-    if (c.root.style.display !== "block") return;
-    if (!coachLastTarget) return;
-    positionCoachToTarget(coachLastTarget);
-  };
+      if (c.currentPose === "point") {
+        ax = cx - (imgW * 0.95);
+        ay = cy + (imgH * 0.10);
+      } else if (c.currentPose === "checklist") {
+        const cons = document.querySelector(".constellation") || document.getElementById("subprogramasField");
+        if (cons && isVisible(cons)) {
+          const cr = cons.getBoundingClientRect();
+          const ccx = cr.left + cr.width * 0.52;
+          const ccy = cr.top + cr.height * 0.58;
+          ax = ccx - (imgW * 0.88);
+          ay = ccy - (imgH * 0.25);
+        } else {
+          ax = cx - (imgW * 0.95);
+          ay = cy - (imgH * 0.10);
+        }
+      } else if (c.currentPose === "saludo") {
+        ax = cx - (imgW * 0.90);
+        ay = cy + (imgH * 0.08);
+      } else if (c.currentPose === "exit") {
+        ax = cx - (imgW * 0.92);
+        ay = cy + (imgH * 0.10);
+      } else {
+        const offX = imgW * 1.05;
+        const offY = imgH * 0.20;
 
-  window.addEventListener("resize", onMove, { passive: true });
-  window.addEventListener("scroll", onMove, { passive: true });
+        if (chosen.name === "left")  { ax = cx + offX; ay = cy + offY; }
+        if (chosen.name === "right") { ax = cx - offX; ay = cy + offY; }
+        if (chosen.name === "top")   { ax = cx - imgW * 0.20; ay = cy + imgH * 0.70; }
+        if (chosen.name === "bottom"){ ax = cx - imgW * 0.20; ay = cy - imgH * 0.40; }
+      }
 
-  c._cleanup = () => {
-    window.removeEventListener("resize", onMove);
-    window.removeEventListener("scroll", onMove);
-  };
+      ax = clamp(ax, -80, window.innerWidth + 80);
+      ay = clamp(ay, -80, window.innerHeight + 80);
 
-  if (autoCloseMs && autoCloseMs > 0) {
-    coachTimer = setTimeout(() => hideCoach(false), autoCloseMs);
-  }
-}
+      c.img.style.left = `${ax}px`;
+      c.img.style.top = `${ay}px`;
 
-function hideCoach(markDone = false) {
-  if (!coach) return;
-  clearTimeout(coachTimer);
+      // ring update
+      applyCoachTargetHighlight(targetEl);
+    }
 
-  coach.root.style.display = "none";
-  coach._cleanup?.();
-  coach._cleanup = null;
+    function showCoach({ target, text, pose = "point", step = 1, total = 4, autoCloseMs = 0 } = {}) {
+      const c = ensureCoach();
 
-  clearCoachTargetHighlight();
+      c._cleanup?.();
+      c._cleanup = null;
 
-  if (markDone) {
-    try { localStorage.setItem(COACH_KEY, "1"); } catch {}
-  }
-}
+      clearTimeout(coachTimer);
 
-function shouldAutoCoach() {
-  try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
-}
+      if (!target || !isVisible(target)) return;
 
-A.showCoach = showCoach;
-A.hideCoach = hideCoach;
-A.shouldAutoCoach = shouldAutoCoach;
+      setCoachPose(pose);
+      c.msg.textContent = text || "";
+      c.dots.textContent = `${step}/${total}`;
+      c.btnBack.disabled = step <= 1;
+      c.btnNext.textContent = step >= total ? "Finalizar" : "Siguiente";
 
-window.showCoach = showCoach;
-window.hideCoach = hideCoach;
-window.shouldAutoCoach = shouldAutoCoach;
+      c.root.style.display = "block";
 
-  // --------------------------
-  // TOUR
-  // --------------------------
-  function getTourSteps() {
-    const role = getRoleSafe();
+      if (!target.classList?.contains("astra-virtual-target")) {
+        scrollIntoViewSmart(target);
+      }
 
-    const field = document.getElementById("subprogramasField");
-    const firstSubp = field ? field.querySelector(".subp-node") : null;
+      requestAnimationFrame(() => positionCoachToTarget(target));
 
-    const adminBar = document.getElementById("adminIesBar");
-    const iesSelect = document.getElementById("iesSelect");
+      const onMove = () => {
+        if (c.root.style.display !== "block") return;
+        if (!coachLastTarget) return;
+        positionCoachToTarget(coachLastTarget);
+      };
 
-    const btnResumenGlobal = document.getElementById("btnResumenGlobal");
-    const btnReset = document.getElementById("btnReset");
-    const btnGuide = document.getElementById("btnGuide");
-    const btnVerResumen = document.getElementById("btnVerResumen");
+      window.addEventListener("resize", onMove, { passive: true });
+      window.addEventListener("scroll", onMove, { passive: true });
 
-    const safeHomeTarget = () =>
-      pickTarget([firstSubp, "#subprogramasField", ".constellation", ".astra-brand"]) ||
-      document.querySelector(".astra-brand") ||
-      document.body;
+      c._cleanup = () => {
+        window.removeEventListener("resize", onMove);
+        window.removeEventListener("scroll", onMove);
+      };
 
-    const safeBtnTarget = () =>
-      pickTarget([btnReset, "#btnReset", btnGuide, "#btnGuide", ".astra-brand"]) ||
-      document.querySelector(".astra-brand") ||
-      document.body;
+      if (autoCloseMs && autoCloseMs > 0) {
+        coachTimer = setTimeout(() => hideCoach(false), autoCloseMs);
+      }
+    }
 
-    const rightPanelAnchor = () =>
-      ensureVirtualTarget("astraVirtualRightPanel", {
-        left: "76%",
-        top: "42%",
-        width: "20%",
-        height: "30%",
-      });
+    function hideCoach(markDone = false) {
+      if (!coach) return;
+      clearTimeout(coachTimer);
 
-    if (role === "admin") {
+      coach.root.style.display = "none";
+      coach._cleanup?.();
+      coach._cleanup = null;
+
+      clearCoachTargetHighlight();
+
+      if (markDone) {
+        try { localStorage.setItem(COACH_KEY, "1"); } catch {}
+      }
+    }
+
+    function shouldAutoCoach() {
+      try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
+    }
+
+    A.showCoach = showCoach;
+    A.hideCoach = hideCoach;
+    A.shouldAutoCoach = shouldAutoCoach;
+
+    window.showCoach = showCoach;
+    window.hideCoach = hideCoach;
+    window.shouldAutoCoach = shouldAutoCoach;
+
+    // --------------------------
+    // TOUR
+    // --------------------------
+    function getTourSteps() {
+      const role = getRoleSafe();
+
+      const field = document.getElementById("subprogramasField");
+      const firstSubp = field ? field.querySelector(".subp-node") : null;
+
+      const adminBar = document.getElementById("adminIesBar");
+      const iesSelect = document.getElementById("iesSelect");
+
+      const btnResumenGlobal = document.getElementById("btnResumenGlobal");
+      const btnReset = document.getElementById("btnReset");
+      const btnGuide = document.getElementById("btnGuide");
+      const btnVerResumen = document.getElementById("btnVerResumen");
+
+      const safeHomeTarget = () =>
+        pickTarget([firstSubp, "#subprogramasField", ".constellation", ".astra-brand"]) ||
+        document.querySelector(".astra-brand") ||
+        document.body;
+
+      const safeBtnTarget = () =>
+        pickTarget([btnReset, "#btnReset", btnGuide, "#btnGuide", ".astra-brand"]) ||
+        document.querySelector(".astra-brand") ||
+        document.body;
+
+      const rightPanelAnchor = () =>
+        ensureVirtualTarget("astraVirtualRightPanel", {
+          left: "76%",
+          top: "42%",
+          width: "20%",
+          height: "30%",
+        });
+
+      if (role === "admin") {
+        return [
+          {
+            pose: "saludo",
+            text: "Hola 👋 Soy Astra. Guia rapida en 4 pasos.",
+            target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar", ".astra-brand"]) || safeBtnTarget(),
+          },
+          {
+            pose: "point",
+            text: "Paso 1: selecciona una IES (arriba) para ver su informacion.",
+            target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar"]) || safeBtnTarget(),
+          },
+          {
+            pose: "checklist",
+            text: "Paso 2: entra a Resumen general para ver avances y evidencias.",
+            target: () => pickTarget([btnResumenGlobal, "#btnResumenGlobal"]) || safeBtnTarget(),
+          },
+          {
+            pose: "exit",
+            text: "Listo. Si quieres ver esta guia otra vez, usa el boton Guia.",
+            target: () => pickTarget([btnGuide, "#btnGuide", btnResumenGlobal, ".astra-brand"]) || safeBtnTarget(),
+          },
+        ];
+      }
+
       return [
         {
           pose: "saludo",
-          text: "Hola 👋 Soy Astra. Guia rapida en 4 pasos.",
-          target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar", ".astra-brand"]) || safeBtnTarget(),
+          text: "Hola 👋 Soy Astra. Te muestro como usar ASTRA rapido.",
+          target: () => safeHomeTarget(),
         },
         {
           pose: "point",
-          text: "Paso 1: selecciona una IES (arriba) para ver su informacion.",
-          target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar"]) || safeBtnTarget(),
+          text: "Paso 1: haz clic en un subprograma para ver sus submodulos.",
+          target: () => pickTarget([firstSubp, "#subprogramasField .subp-node", field]) || safeHomeTarget(),
         },
         {
           pose: "checklist",
-          text: "Paso 2: entra a Resumen general para ver avances y evidencias.",
-          target: () => pickTarget([btnResumenGlobal, "#btnResumenGlobal"]) || safeBtnTarget(),
+          text: "Paso 2: cuando se abra el panel derecho, elige un submodulo para registrar evidencias.",
+          target: () => pickTarget(["#submodsCanvas.show", "#submodulosList"]) || rightPanelAnchor(),
         },
         {
           pose: "exit",
-          text: "Listo. Si quieres ver esta guia otra vez, usa el boton Guia.",
-          target: () => pickTarget([btnGuide, "#btnGuide", btnResumenGlobal, ".astra-brand"]) || safeBtnTarget(),
+          text: "Paso 3: luego usa 'Ver resumen' para revisar el avance cuando quieras.",
+          target: () => pickTarget([btnVerResumen, "#btnVerResumen", btnReset, "#btnReset", btnGuide, "#btnGuide"]) || safeBtnTarget(),
         },
       ];
     }
 
-    return [
-      {
-        pose: "saludo",
-        text: "Hola 👋 Soy Astra. Te muestro como usar ASTRA rapido.",
-        target: () => safeHomeTarget(),
-      },
-      {
-        pose: "point",
-        text: "Paso 1: haz clic en un subprograma para ver sus submodulos.",
-        target: () => pickTarget([firstSubp, "#subprogramasField .subp-node", field]) || safeHomeTarget(),
-      },
-      {
-        pose: "checklist",
-        text: "Paso 2: cuando se abra el panel derecho, elige un submodulo para registrar evidencias.",
-        target: () => pickTarget(["#submodsCanvas.show", "#submodulosList"]) || rightPanelAnchor(),
-      },
-      {
-        pose: "exit",
-        text: "Paso 3: luego usa 'Ver resumen' para revisar el avance cuando quieras.",
-        target: () => pickTarget([btnVerResumen, "#btnVerResumen", btnReset, "#btnReset", btnGuide, "#btnGuide"]) || safeBtnTarget(),
-      },
-    ];
-  }
+    function renderTourStep() {
+      const steps = getTourSteps();
+      const total = steps.length;
+      const idx = Math.max(0, Math.min(coachStep, total - 1));
+      const s = steps[idx];
 
-  function renderTourStep() {
-    const steps = getTourSteps();
-    const total = steps.length;
-    const idx = Math.max(0, Math.min(coachStep, total - 1));
-    const s = steps[idx];
+      setTimeout(() => {
+        const target = (typeof s.target === "function") ? s.target() : s.target;
+        const fallback = document.querySelector(".astra-brand") || document.body;
 
-    setTimeout(() => {
-      const target = (typeof s.target === "function") ? s.target() : s.target;
-      const fallback = document.querySelector(".astra-brand") || document.body;
+        showCoach({
+          target: target || fallback,
+          pose: s.pose,
+          text: s.text,
+          step: idx + 1,
+          total,
+        });
+      }, 60);
+    }
 
-      showCoach({
-        target: target || fallback,
-        pose: s.pose,
-        text: s.text,
-        step: idx + 1,
-        total,
+    function tourStart() { coachStep = 0; renderTourStep(); }
+
+    function tourNext() {
+      const steps = getTourSteps();
+      if (coachStep >= steps.length - 1) { hideCoach(true); return; }
+      coachStep += 1;
+      renderTourStep();
+    }
+
+    function tourPrev() {
+      if (coachStep <= 0) return;
+      coachStep -= 1;
+      renderTourStep();
+    }
+
+    A.openGuide = function () { tourStart(); };
+
+    const btnGuideEl = document.getElementById("btnGuide");
+    if (btnGuideEl && !btnGuideEl.dataset.wiredGuide) {
+      btnGuideEl.dataset.wiredGuide = "1";
+      btnGuideEl.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        tourStart();
       });
-    }, 60);
-  }
+    }
 
-  function tourStart() { coachStep = 0; renderTourStep(); }
-
-  function tourNext() {
-    const steps = getTourSteps();
-    if (coachStep >= steps.length - 1) { hideCoach(true); return; }
-    coachStep += 1;
-    renderTourStep();
-  }
-
-  function tourPrev() {
-    if (coachStep <= 0) return;
-    coachStep -= 1;
-    renderTourStep();
-  }
-
-  A.openGuide = function () { tourStart(); };
-
-  const btnGuideEl = document.getElementById("btnGuide");
-  if (btnGuideEl && !btnGuideEl.dataset.wiredGuide) {
-    btnGuideEl.dataset.wiredGuide = "1";
-    btnGuideEl.addEventListener("click", (ev) => {
-      ev.preventDefault();
-      tourStart();
-    });
-  }
-
-  function autoStartIfNeeded() {
-    if (!shouldAutoCoach()) return;
-    setTimeout(() => { try { tourStart(); } catch {} }, 350);
-  }
-  autoStartIfNeeded();
-
-})();
-
-
+    function autoStartIfNeeded() {
+      if (!shouldAutoCoach()) return;
+      setTimeout(() => { try { tourStart(); } catch {} }, 350);
+    }
+    autoStartIfNeeded();
+  })();
 
   // ============================================================
   // Logout
@@ -922,394 +943,375 @@ window.shouldAutoCoach = shouldAutoCoach;
     if (field) field.innerHTML = "";
   }
 
-// ============================================================
-// showOnly (FIX)
-// - NO relanza coach automáticamente aquí
-// - Limpia paneles correctamente por rol
-// - Home solo renderiza mapa (sin coach)
-// ============================================================
-function showOnly(panel) {
-  // Solo ocultamos coach, pero NO marcamos "done"
-  hideCoach(false);
-
-  // Admin sin IES seleccionada: bloquea todo
-  if (isAdminLocked()) {
-    resetLockedAdminUI();
-    return;
+  // ============================================================
+  // showOnly (no revienta si coach no existe)
+  // ============================================================
+  function safeHideCoach() {
+    try { window.hideCoach?.(false); } catch {}
   }
 
-  // --------------------------
-  // ADMIN
-  // --------------------------
-  if (isAdmin()) {
-    // Admin no usa mapa constelación ni operativa
-    if (constellation) setHidden(constellation, true);
+  function showOnly(panel) {
+    safeHideCoach();
 
-    // Limpia el field para que no queden subprogramas visibles
-    if (field) field.innerHTML = "";
-    if (searchSubp) searchSubp.value = "";
+    if (isAdminLocked()) {
+      resetLockedAdminUI();
+      return;
+    }
 
-    // Operativa siempre oculta en admin
-    setHidden(operativaPanel, true);
+    if (isAdmin()) {
+      if (constellation) setHidden(constellation, true);
+      if (field) field.innerHTML = "";
+      if (searchSubp) searchSubp.value = "";
 
-    // Solo muestra resumen si panel === "resumen"
+      setHidden(operativaPanel, true);
+
+      const resumenIsVisible = panel === "resumen";
+      setHidden(resumenPanel, !resumenIsVisible);
+
+      forceCloseSubmodsDrawer();
+      return;
+    }
+
+    const operativaIsVisible = panel === "operativa";
     const resumenIsVisible = panel === "resumen";
+    const homeIsVisible = panel === "home";
+
+    setHidden(operativaPanel, !operativaIsVisible);
     setHidden(resumenPanel, !resumenIsVisible);
 
-    // Cierra drawer por si quedó abierto
-    forceCloseSubmodsDrawer();
+    if (constellation) setHidden(constellation, !homeIsVisible);
 
-    return;
+    if (homeIsVisible) {
+      renderSubprogramas();
+      forceCloseSubmodsDrawer();
+    }
   }
 
-  // --------------------------
-  // IES
-  // --------------------------
-  const operativaIsVisible = panel === "operativa";
-  const resumenIsVisible = panel === "resumen";
-  const homeIsVisible = panel === "home";
-
-  setHidden(operativaPanel, !operativaIsVisible);
-  setHidden(resumenPanel, !resumenIsVisible);
-
-  // Constelación solo en home
-  if (constellation) setHidden(constellation, !homeIsVisible);
-
-  if (homeIsVisible) {
-    // Renderiza solo el mapa; NO dispares coach aquí (se maneja en INIT o botón Guía)
-    renderSubprogramas();
-
-    // Si quieres, cierra el drawer cuando vuelves a home
-    forceCloseSubmodsDrawer();
-  }
-}
-
-
-// ============================================================
-// Error helper (401/403) + helpers operativa + valoracion niveles
-// (Pega ESTE BLOQUE reemplazando todo tu bloque actual)
-// ============================================================
-
-function getHttpStatus(e) {
-  // Soporta errores lanzados por A.api/core.js y fetch genérico
-  return (
-    e?.status ??
-    e?.response?.status ??
-    e?.cause?.status ??
-    e?.data?.status ??
-    e?.statusCode ??
-    null
-  );
-}
-
-function getHttpDetail(e) {
-  return (
-    e?.data?.detail ||
-    e?.data?.message ||
-    e?.message ||
-    e?.toString?.() ||
-    ""
-  );
-}
-
-function toastHttpError(e, context = "") {
-  const status = getHttpStatus(e);
-  const detail = getHttpDetail(e) || "Falló la operación.";
-
-  if (status === 401) {
-    toastCompat({
-      type: "warning",
-      title: "Sesión",
-      msg: "Tu sesión expiró o no es válida. Vuelve a iniciar sesión.",
-      ms: 6500,
-    });
-    return;
+  // ============================================================
+  // Error helpers
+  // ============================================================
+  function getHttpStatus(e) {
+    return (
+      e?.status ??
+      e?.response?.status ??
+      e?.cause?.status ??
+      e?.data?.status ??
+      e?.statusCode ??
+      null
+    );
   }
 
-  if (status === 403) {
+  function getHttpDetail(e) {
+    return (
+      e?.data?.detail ||
+      e?.data?.message ||
+      e?.message ||
+      e?.toString?.() ||
+      ""
+    );
+  }
+
+  function toastHttpError(e, context = "") {
+    const status = getHttpStatus(e);
+    const detail = getHttpDetail(e) || "Fallo la operacion.";
+
+    if (status === 401) {
+      toastCompat({
+        type: "warning",
+        title: "Sesion",
+        msg: "Tu sesion expiro o no es valida. Vuelve a iniciar sesion.",
+        ms: 6500,
+      });
+      return;
+    }
+
+    if (status === 403) {
+      toastCompat({
+        type: "danger",
+        title: "Permisos",
+        msg: (context ? `${context}. ` : "") + (detail || "Acceso denegado."),
+        ms: 8500,
+      });
+      return;
+    }
+
     toastCompat({
       type: "danger",
-      title: "Permisos",
-      msg: (context ? `${context}. ` : "") + (detail || "Acceso denegado."),
-      ms: 8500,
+      title: "Error",
+      msg: (context ? `${context}. ` : "") + detail,
+      ms: 7000,
     });
-    return;
   }
 
-  toastCompat({
-    type: "danger",
-    title: "Error",
-    msg: (context ? `${context}. ` : "") + detail,
-    ms: 7000,
-  });
-}
+  function toDateInput(v) {
+    if (!v) return "";
+    return String(v).slice(0, 10);
+  }
 
-function toDateInput(v) {
-  if (!v) return "";
-  return String(v).slice(0, 10);
-}
+  function clamp01_100(n) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return 0;
+    return Math.max(0, Math.min(100, x));
+  }
 
-function clamp01_100(n) {
-  const x = Number(n);
-  if (!Number.isFinite(x)) return 0;
-  return Math.max(0, Math.min(100, x));
-}
+  function evidenciaIdOf(e) {
+    return e?.evidencia_id ?? e?.id ?? e?.evidenciaId ?? null;
+  }
 
-function evidenciaIdOf(e) {
-  // soporta diferentes formas del backend
-  return e?.evidencia_id ?? e?.id ?? e?.evidenciaId ?? null;
-}
+  // ============================================================
+  // Valoracion por niveles
+  // ============================================================
+  const VALORACION_LEVELS = [
+    { key: "deficiente", label: "Deficiente", score: 25 },
+    { key: "poco_satisfactorio", label: "Poco satisfactorio", score: 50 },
+    { key: "cuasi_satisfactorio", label: "Cuasi satisfactorio", score: 75 },
+    { key: "satisfactorio", label: "Satisfactorio", score: 100 },
+  ];
 
-// ============================================================
-// Valoracion por niveles (UI)
-// OJO: no dupliques este const en otra parte del archivo.
-// ============================================================
-const VALORACION_LEVELS = [
-  { key: "deficiente", label: "Deficiente", score: 25 },
-  { key: "poco_satisfactorio", label: "Poco satisfactorio", score: 50 },
-  { key: "cuasi_satisfactorio", label: "Cuasi satisfactorio", score: 75 },
-  { key: "satisfactorio", label: "Satisfactorio", score: 100 },
-];
+  function labelFromNivel(key) {
+    const it = VALORACION_LEVELS.find((x) => x.key === key);
+    return it ? it.label : "Deficiente";
+  }
 
-function labelFromNivel(key) {
-  const it = VALORACION_LEVELS.find((x) => x.key === key);
-  return it ? it.label : "Deficiente";
-}
+  function scoreFromNivel(key) {
+    const it = VALORACION_LEVELS.find((x) => x.key === key);
+    return it ? it.score : 25;
+  }
 
-function scoreFromNivel(key) {
-  const it = VALORACION_LEVELS.find((x) => x.key === key);
-  return it ? it.score : 25;
-}
+  function nivelFromValoracion(score0_100) {
+    const v = clamp01_100(score0_100);
+    if (v >= 88) return "satisfactorio";
+    if (v >= 63) return "cuasi_satisfactorio";
+    if (v >= 38) return "poco_satisfactorio";
+    return "deficiente";
+  }
 
-function nivelFromValoracion(score0_100) {
-  const v = clamp01_100(score0_100);
-  if (v >= 88) return "satisfactorio";
-  if (v >= 63) return "cuasi_satisfactorio";
-  if (v >= 38) return "poco_satisfactorio";
-  return "deficiente";
-}
+  // ============================================================
+  // API try helper (si un endpoint no existe, intenta otro)
+  // ============================================================
+  async function apiTry(paths = [], opts = {}) {
+    let lastErr = null;
+    for (const p of paths) {
+      try {
+        return await A.api(p, opts);
+      } catch (e) {
+        lastErr = e;
+        const st = getHttpStatus(e);
+        // solo fallback en 404/405
+        if (st !== 404 && st !== 405) throw e;
+      }
+    }
+    throw lastErr || new Error("No se pudo completar la solicitud.");
+  }
 
-// ============================================================
-// Render tabla operativa
-// ============================================================
-function buildOperativaTableHTML(evidencias, submoduloNombre, iesNombre) {
-  const rows = (Array.isArray(evidencias) ? evidencias : []).map((e, idx) => {
-    const evidId = evidenciaIdOf(e);
+  // ============================================================
+  // Render tabla operativa
+  // ============================================================
+  function buildOperativaTableHTML(evidencias, submoduloNombre, iesNombre) {
+    const rows = (Array.isArray(evidencias) ? evidencias : []).map((e, idx) => {
+      const evidId = evidenciaIdOf(e);
 
-    const titulo = e?.titulo ?? `Evidencia ${idx + 1}`;
-    const responsable = e?.responsable ?? "";
+      const titulo = e?.titulo ?? `Evidencia ${idx + 1}`;
+      const responsable = e?.responsable ?? "";
 
-    // backend puede traer valoracion numérica
-    const valoracionNum = clamp01_100(e?.valoracion ?? 0);
+      const valoracionNum = clamp01_100(e?.valoracion ?? 0);
 
-    // si backend ya guarda el nivel en extra_data, lo usamos
-    const nivelSavedRaw =
-      e?.extra_data?.valoracion_nivel ??
-      e?.extra_data?.valoracionNivel ??
-      e?.extra_data?.valoracion_level ??
-      "";
+      const nivelSavedRaw =
+        e?.extra_data?.valoracion_nivel ??
+        e?.extra_data?.valoracionNivel ??
+        e?.extra_data?.valoracion_level ??
+        "";
 
-    const nivelSaved = (nivelSavedRaw || "").toString().trim();
-    const nivelKey = nivelSaved ? nivelSaved : nivelFromValoracion(valoracionNum);
+      const nivelSaved = (nivelSavedRaw || "").toString().trim();
+      const nivelKey = nivelSaved ? nivelSaved : nivelFromValoracion(valoracionNum);
 
-    const avance = clamp01_100(e?.avance_pct ?? 0);
-    const fechaIni = toDateInput(e?.fecha_inicio);
-    const fechaFin = toDateInput(e?.fecha_fin);
-    const presenta = !!e?.presenta;
-    const cat = (e?.categoria_si_no ?? "").toString();
+      const avance = clamp01_100(e?.avance_pct ?? 0);
+      const fechaIni = toDateInput(e?.fecha_inicio);
+      const fechaFin = toDateInput(e?.fecha_fin);
+      const presenta = !!e?.presenta;
 
-    // si no hay id, no se puede guardar
-    const canSave = !!evidId;
+      const catVal = (() => {
+        const v = e?.categoria_si_no;
+        if (v === true) return "SI";
+        if (v === false) return "NO";
+        const s = (v ?? "").toString().trim().toUpperCase();
+        return (s === "SI" || s === "NO") ? s : "";
+      })();
+
+      const canSave = !!evidId;
+
+      return `
+        <tr data-evid="${escapeHtml(String(evidId ?? ""))}">
+          <td style="width:40px;" class="text-secondary">${idx + 1}</td>
+
+          <td style="min-width:340px;">
+            <div class="fw-semibold">${escapeHtml(titulo)}</div>
+            <div class="text-secondary small">
+              Evidencia #${escapeHtml(String(evidId ?? "—"))}
+              · Submodulo #${escapeHtml(String(e?.submodulo_id ?? ""))}
+            </div>
+          </td>
+
+          <td style="min-width:180px;">
+            <input class="form-control form-control-sm bg-dark text-light border-secondary js-responsable"
+                   value="${escapeHtml(responsable)}" placeholder="Responsable" />
+          </td>
+
+          <td style="min-width:130px;">
+            <div class="d-flex align-items-center gap-2">
+              <input type="checkbox" class="form-check-input js-presenta" ${presenta ? "checked" : ""} />
+              <span class="small text-secondary">Presenta</span>
+            </div>
+          </td>
+
+          <td style="min-width:210px;">
+            <select class="form-select form-select-sm bg-dark text-light border-secondary js-valoracion-nivel">
+              ${VALORACION_LEVELS.map((l) => {
+                const selected = l.key === nivelKey ? "selected" : "";
+                return `<option value="${escapeHtml(l.key)}" ${selected}>${escapeHtml(l.label)}</option>`;
+              }).join("")}
+            </select>
+            <div class="text-secondary small mt-1">Valoracion</div>
+          </td>
+
+          <td style="min-width:120px;">
+            <input type="number" min="0" max="100"
+                   class="form-control form-control-sm bg-dark text-light border-secondary js-avance"
+                   value="${escapeHtml(String(avance))}" />
+            <div class="text-secondary small mt-1">Avance %</div>
+          </td>
+
+          <td style="min-width:150px;">
+            <input type="date"
+                   class="form-control form-control-sm bg-dark text-light border-secondary js-fecha-inicio"
+                   value="${escapeHtml(fechaIni)}" />
+            <div class="text-secondary small mt-1">Inicio</div>
+          </td>
+
+          <td style="min-width:150px;">
+            <input type="date"
+                   class="form-control form-control-sm bg-dark text-light border-secondary js-fecha-fin"
+                   value="${escapeHtml(fechaFin)}" />
+            <div class="text-secondary small mt-1">Fin</div>
+          </td>
+
+          <td style="min-width:150px;">
+            <select class="form-select form-select-sm bg-dark text-light border-secondary js-categoria">
+              <option value="" ${catVal === "" ? "selected" : ""}>—</option>
+              <option value="SI" ${catVal === "SI" ? "selected" : ""}>SI</option>
+              <option value="NO" ${catVal === "NO" ? "selected" : ""}>NO</option>
+            </select>
+            <div class="text-secondary small mt-1">Categoria</div>
+          </td>
+
+          <td style="min-width:140px;" class="text-end">
+            <button class="btn btn-outline-light btn-sm js-guardar" ${canSave ? "" : "disabled"}>Guardar</button>
+            <div class="text-secondary small mt-1 js-status" style="min-height:18px;"></div>
+          </td>
+        </tr>
+      `;
+    });
 
     return `
-      <tr data-evid="${escapeHtml(String(evidId ?? ""))}">
-        <td style="width:40px;" class="text-secondary">${idx + 1}</td>
-
-        <td style="min-width:340px;">
-          <div class="fw-semibold">${escapeHtml(titulo)}</div>
+      <div class="container-fluid mt-3">
+        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+          <div>
+            <div class="text-secondary small">OPERATIVA</div>
+            <h4 class="mb-1">${escapeHtml(submoduloNombre || "Submodulo")}</h4>
+            <div class="text-secondary small">IES: ${escapeHtml(iesNombre || "—")}</div>
+          </div>
           <div class="text-secondary small">
-            Evidencia #${escapeHtml(String(evidId ?? "—"))}
-            · Submódulo #${escapeHtml(String(e?.submodulo_id ?? ""))}
+            Tip: edita y presiona <b>Guardar</b> por fila.
           </div>
-        </td>
+        </div>
 
-        <td style="min-width:180px;">
-          <input class="form-control form-control-sm bg-dark text-light border-secondary js-responsable"
-                 value="${escapeHtml(responsable)}" placeholder="Responsable" />
-        </td>
+        <hr class="my-2" />
 
-        <td style="min-width:130px;">
-          <div class="d-flex align-items-center gap-2">
-            <input type="checkbox" class="form-check-input js-presenta" ${presenta ? "checked" : ""} />
-            <span class="small text-secondary">Presenta</span>
-          </div>
-        </td>
-
-        <td style="min-width:210px;">
-          <select class="form-select form-select-sm bg-dark text-light border-secondary js-valoracion-nivel">
-            ${VALORACION_LEVELS.map((l) => {
-              const selected = l.key === nivelKey ? "selected" : "";
-              return `<option value="${escapeHtml(l.key)}" ${selected}>${escapeHtml(l.label)}</option>`;
-            }).join("")}
-          </select>
-          <div class="text-secondary small mt-1">Valoración</div>
-        </td>
-
-        <td style="min-width:120px;">
-          <input type="number" min="0" max="100"
-                 class="form-control form-control-sm bg-dark text-light border-secondary js-avance"
-                 value="${escapeHtml(String(avance))}" />
-          <div class="text-secondary small mt-1">Avance %</div>
-        </td>
-
-        <td style="min-width:150px;">
-          <input type="date"
-                 class="form-control form-control-sm bg-dark text-light border-secondary js-fecha-inicio"
-                 value="${escapeHtml(fechaIni)}" />
-          <div class="text-secondary small mt-1">Inicio</div>
-        </td>
-
-        <td style="min-width:150px;">
-          <input type="date"
-                 class="form-control form-control-sm bg-dark text-light border-secondary js-fecha-fin"
-                 value="${escapeHtml(fechaFin)}" />
-          <div class="text-secondary small mt-1">Fin</div>
-        </td>
-
-        <td style="min-width:150px;">
-          <select class="form-select form-select-sm bg-dark text-light border-secondary js-categoria">
-            <option value="" ${cat === "" ? "selected" : ""}>—</option>
-            <option value="SI" ${cat.toUpperCase() === "SI" ? "selected" : ""}>SI</option>
-            <option value="NO" ${cat.toUpperCase() === "NO" ? "selected" : ""}>NO</option>
-          </select>
-          <div class="text-secondary small mt-1">Categoría</div>
-        </td>
-
-        <td style="min-width:140px;" class="text-end">
-          <button class="btn btn-outline-light btn-sm js-guardar" ${canSave ? "" : "disabled"}>Guardar</button>
-          <div class="text-secondary small mt-1 js-status" style="min-height:18px;"></div>
-        </td>
-      </tr>
+        <div class="table-responsive mt-3">
+          <table class="table table-dark table-sm align-middle">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Evidencia</th>
+                <th>Responsable</th>
+                <th>Presenta</th>
+                <th class="text-end">Valoracion</th>
+                <th class="text-end">Avance</th>
+                <th>Fecha inicio</th>
+                <th>Fecha fin</th>
+                <th>Categoria</th>
+                <th class="text-end">Accion</th>
+              </tr>
+            </thead>
+            <tbody id="opTbody">
+              ${rows.join("") || `<tr><td colspan="10" class="text-secondary">No hay evidencias.</td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      </div>
     `;
-  });
+  }
 
-  return `
-    <div class="container-fluid mt-3">
-      <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
-        <div>
-          <div class="text-secondary small">OPERATIVA</div>
-          <h4 class="mb-1">${escapeHtml(submoduloNombre || "Submódulo")}</h4>
-          <div class="text-secondary small">IES: ${escapeHtml(iesNombre || "—")}</div>
-        </div>
-        <div class="text-secondary small">
-          Tip: edita y presiona <b>Guardar</b> por fila.
-        </div>
-      </div>
+  async function wireOperativaTableHandlers(rootEl, saveFn) {
+    const tbody = rootEl.querySelector("#opTbody");
+    if (!tbody) return;
 
-      <hr class="my-2" />
+    tbody.onclick = async (ev) => {
+      const btn = ev.target.closest(".js-guardar");
+      if (!btn) return;
 
-      <div class="table-responsive mt-3">
-        <table class="table table-dark table-sm align-middle">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Evidencia</th>
-              <th>Responsable</th>
-              <th>Presenta</th>
-              <th class="text-end">Valoración</th>
-              <th class="text-end">Avance</th>
-              <th>Fecha inicio</th>
-              <th>Fecha fin</th>
-              <th>Categoría</th>
-              <th class="text-end">Acción</th>
-            </tr>
-          </thead>
-          <tbody id="opTbody">
-            ${rows.join("") || `<tr><td colspan="10" class="text-secondary">No hay evidencias.</td></tr>`}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
+      const tr = ev.target.closest("tr[data-evid]");
+      if (!tr) return;
 
-// ============================================================
-// Handler Guardar por fila
-// ============================================================
-async function wireOperativaTableHandlers(rootEl) {
-  const tbody = rootEl.querySelector("#opTbody");
-  if (!tbody) return;
+      const evidId = Number(tr.dataset.evid);
+      if (!evidId) return;
 
-  tbody.addEventListener("click", async (ev) => {
-    const btn = ev.target.closest(".js-guardar");
-    if (!btn) return;
+      const statusEl = tr.querySelector(".js-status");
+      const setStatus = (txt, kind = "muted") => {
+        if (!statusEl) return;
+        statusEl.className = `text-${kind} small mt-1 js-status`;
+        statusEl.textContent = txt || "";
+      };
 
-    const tr = ev.target.closest("tr[data-evid]");
-    if (!tr) return;
+      const nivelKey = tr.querySelector(".js-valoracion-nivel")?.value || "deficiente";
 
-    const evidId = Number(tr.dataset.evid);
-    if (!evidId) return;
+      const catRaw = (tr.querySelector(".js-categoria")?.value || "")
+        .toString()
+        .trim()
+        .toUpperCase();
 
-    const statusEl = tr.querySelector(".js-status");
-    const setStatus = (txt, kind = "muted") => {
-      if (!statusEl) return;
-      statusEl.className = `text-${kind} small mt-1 js-status`;
-      statusEl.textContent = txt || "";
+      const catBool = catRaw === "SI" ? true : catRaw === "NO" ? false : null;
+
+      const payload = {
+        responsable: tr.querySelector(".js-responsable")?.value?.trim() || "",
+        presenta: !!tr.querySelector(".js-presenta")?.checked,
+        valoracion: scoreFromNivel(nivelKey),
+        extra_data: {
+          valoracion_nivel: nivelKey,
+          valoracion_label: labelFromNivel(nivelKey),
+        },
+        avance_pct: clamp01_100(tr.querySelector(".js-avance")?.value),
+        fecha_inicio: tr.querySelector(".js-fecha-inicio")?.value || null,
+        fecha_fin: tr.querySelector(".js-fecha-fin")?.value || null,
+        categoria_si_no: catBool,
+      };
+
+      try {
+        btn.disabled = true;
+        setStatus("Guardando…", "secondary");
+        await saveFn(evidId, payload);
+        setStatus("Guardado ✓", "success");
+        toastCompat({ type: "success", title: "Operativa", msg: "Fila guardada.", ms: 1800 });
+      } catch (e) {
+        console.error(e);
+        toastHttpError(e, "No se pudo guardar");
+        setStatus("Error al guardar", "danger");
+      } finally {
+        btn.disabled = false;
+        setTimeout(() => setStatus(""), 2500);
+      }
     };
-
-    const nivelKey =
-      tr.querySelector(".js-valoracion-nivel")?.value || "deficiente";
-
-    // ✅ categoria_si_no debe ser boolean (true/false) o null
-    const catRaw = (tr.querySelector(".js-categoria")?.value || "")
-      .toString()
-      .trim()
-      .toUpperCase();
-
-    const catBool = catRaw === "SI" ? true : catRaw === "NO" ? false : null;
-
-    const payload = {
-      responsable: tr.querySelector(".js-responsable")?.value?.trim() || "",
-      presenta: !!tr.querySelector(".js-presenta")?.checked,
-
-      // backend sigue recibiendo número (0-100)
-      valoracion: scoreFromNivel(nivelKey),
-
-      // extra_data solo si tu backend lo soporta (en tu modelo sí existe JSONB)
-      extra_data: {
-        valoracion_nivel: nivelKey,
-        valoracion_label: labelFromNivel(nivelKey),
-      },
-
-      avance_pct: clamp01_100(tr.querySelector(".js-avance")?.value),
-      fecha_inicio: tr.querySelector(".js-fecha-inicio")?.value || null,
-      fecha_fin: tr.querySelector(".js-fecha-fin")?.value || null,
-
-      // ✅ ahora sí: boolean/null
-      categoria_si_no: catBool,
-    };
-
-    try {
-      btn.disabled = true;
-      setStatus("Guardando…", "secondary");
-      await saveEvidenciaPatch(evidId, payload);
-      setStatus("Guardado ✓", "success");
-      toastCompat({
-        type: "success",
-        title: "Operativa",
-        msg: "Fila guardada.",
-        ms: 1800,
-      });
-    } catch (e) {
-      console.error(e);
-      toastHttpError(e, "No se pudo guardar");
-      setStatus("Error al guardar", "danger");
-    } finally {
-      btn.disabled = false;
-      setTimeout(() => setStatus(""), 2500);
-    }
-  });
-}
+  }
 
   // ============================================================
   // Admin gate message
@@ -1333,7 +1335,7 @@ async function wireOperativaTableHandlers(rootEl) {
   }
 
   // ============================================================
-  //  IES context resolver (NO ADIVINAR POR EMAIL)
+  // IES context resolver
   // ============================================================
   function resolveIESContextFromCoreAndJwt() {
     const p = A.parseJwt?.() || {};
@@ -1392,46 +1394,41 @@ async function wireOperativaTableHandlers(rootEl) {
     };
   }
 
-  // ============================================================
-  //  NUEVO: resolver IES automáticamente por ies_id -> /ies/
-  // ============================================================
-async function ensureIESResolved() {
-  if (A.state?.ies?.slug) return A.state.ies;
+  async function ensureIESResolved() {
+    if (A.state?.ies?.slug) return A.state.ies;
 
-  const ctx = resolveIESContextFromCoreAndJwt();
-  A.state.ies = ctx;
+    const ctx = resolveIESContextFromCoreAndJwt();
+    A.state.ies = ctx;
 
-  // 🚫 IES no puede consultar /ies/ (admin-only)
-  if (isIES()) return A.state.ies;
+    if (isIES()) return A.state.ies;
 
-  // ✅ Admin: si tengo id pero no slug, resuelvo consultando /ies/
-  if (!A.state.ies.slug && A.state.ies.id) {
-    try {
-      const list = await A.api("/ies/");
-      const found = Array.isArray(list)
-        ? list.find((x) => Number(x.id) === Number(A.state.ies.id))
-        : null;
+    if (!A.state.ies.slug && A.state.ies.id) {
+      try {
+        const list = await A.api("/ies/");
+        const found = Array.isArray(list)
+          ? list.find((x) => Number(x.id) === Number(A.state.ies.id))
+          : null;
 
-      if (found?.slug) {
-        A.state.ies = {
-          ...A.state.ies,
-          slug: found.slug,
-          nombre: found.nombre || A.state.ies.nombre,
-          _source: "ies-list-by-id",
-          _trusted: true,
-        };
-        try {
-          localStorage.setItem("ies_slug", found.slug);
-          localStorage.setItem("ies_id", String(found.id));
-        } catch {}
+        if (found?.slug) {
+          A.state.ies = {
+            ...A.state.ies,
+            slug: found.slug,
+            nombre: found.nombre || A.state.ies.nombre,
+            _source: "ies-list-by-id",
+            _trusted: true,
+          };
+          try {
+            localStorage.setItem("ies_slug", found.slug);
+            localStorage.setItem("ies_id", String(found.id));
+          } catch {}
+        }
+      } catch (e) {
+        console.warn("No se pudo resolver ies_slug usando /ies/:", e);
       }
-    } catch (e) {
-      console.warn("No se pudo resolver ies_slug usando /ies/:", e);
     }
-  }
 
-  return A.state.ies;
-}
+    return A.state.ies;
+  }
 
   // ============================================================
   // Loaders: IES context + IES list (admin)
@@ -1443,25 +1440,23 @@ async function ensureIESResolved() {
       const ctx = resolveIESContextFromCoreAndJwt();
       A.state.ies = ctx.slug ? ctx : { ...ctx, slug: null };
 
-      //  OJO: ya NO retornamos aquí para no matar el catálogo
       if (!ctx.slug) {
-        setUserActive("Institución activa: (sin slug)", true);
+        setUserActive("Institucion activa: (sin slug)", true);
         toastCompat({
           type: "warning",
           title: "Falta IES (slug)",
           msg:
-            "No tengo ies_slug en sesión. Igual te cargo el catálogo. " +
-            "Cuando abras Operativa intentaré resolverlo con /ies/ usando ies_id.",
+            "No tengo ies_slug en sesion. Igual cargo el catalogo. " +
+            "Al abrir Operativa usare endpoints sin slug o intentare fallback.",
           ms: 8000,
         });
         return;
       }
 
-      setUserActive(`Institución activa: ${ctx.nombre || ctx.slug}`, true);
+      setUserActive(`Institucion activa: ${ctx.nombre || ctx.slug}`, true);
       return;
     }
 
-    // Admin: carga lista IES
     setUserActive("", false);
 
     let list = A.state.iesList;
@@ -1488,7 +1483,7 @@ async function ensureIESResolved() {
 
         if (found) {
           setUserActive(`IES activa: ${found.nombre} (${found.slug})`, true);
-          toastCompat ({
+          toastCompat({
             type: "success",
             title: "IES activa",
             msg: `${found.nombre} (${found.slug}). Abriendo Resumen general…`,
@@ -1532,7 +1527,7 @@ async function ensureIESResolved() {
   }
 
   // ============================================================
-  // Subprogramas/submódulos (IES)
+  // Subprogramas/submodulos (IES)
   // ============================================================
   const POS = [
     { left: "10%", top: "18%" },
@@ -1553,7 +1548,7 @@ async function ensureIESResolved() {
         <div class="subp-top">
           <div>
             <h3 class="subp-title">${escapeHtml(sp.nombre)}</h3>
-            <p class="subp-desc">Entra para ver submódulos y registrar evidencias.</p>
+            <p class="subp-desc">Entra para ver submodulos y registrar evidencias.</p>
           </div>
           <div class="subp-chip">#${idx + 1}</div>
         </div>
@@ -1582,7 +1577,6 @@ async function ensureIESResolved() {
       return;
     }
 
-    //  NO bloquear por falta de slug: el catálogo NO depende del slug
     await ensureIESResolved();
 
     const data = await A.api("/catalogo/subprogramas");
@@ -1635,12 +1629,12 @@ async function ensureIESResolved() {
     field?.querySelector(`.subp-node[data-id="${subprogramaId}"]`)?.classList.add("active");
 
     if (submodsTitle) submodsTitle.textContent = sp.nombre;
-    if (submodsMeta) submodsMeta.textContent = `Subprograma #${sp.id} · elige un submódulo`;
+    if (submodsMeta) submodsMeta.textContent = `Subprograma #${sp.id} · elige un submodulo`;
     if (btnVerResumen) btnVerResumen.disabled = true;
   }
 
   function openSubmodsDrawer() {
-    hideCoach(false);
+    safeHideCoach();
     try {
       if (canvasEl) {
         canvasEl.style.visibility = "visible";
@@ -1650,150 +1644,136 @@ async function ensureIESResolved() {
     } catch {}
   }
 
-// ============================================================
-// Endpoint helpers (CORREGIDO: IES vs Admin)
-// ============================================================
-
-// ----------------------------
-// Evidencias
-// ----------------------------
-function evidenciasUrlForSubmodulo(submoduloId) {
-  // ✅ IES (cliente): endpoint permitido (NO usa slug)
-  if (isIES()) {
-    return `/operacion/submodulos/${submoduloId}/evidencias`;
+  // ============================================================
+  // Endpoint helpers + fallbacks
+  // ============================================================
+  function evidenciasPathsForSubmodulo(submoduloId) {
+    const slug = A.state.ies?.slug;
+    if (isIES()) {
+      // primero sin slug, luego fallback con slug si existe
+      const arr = [
+        `/operacion/submodulos/${submoduloId}/evidencias`,
+      ];
+      if (slug) arr.push(`/operacion/ies/${slug}/submodulos/${submoduloId}/evidencias`);
+      return arr;
+    }
+    // admin: requiere slug
+    if (!slug) throw new Error("Falta ies.slug para cargar evidencias (Admin).");
+    return [`/operacion/ies/${slug}/submodulos/${submoduloId}/evidencias`];
   }
 
-  // ✅ Admin: endpoint con slug (admin-only)
-  const slug = A.state.ies?.slug;
-  if (!slug) throw new Error("Falta ies.slug para cargar evidencias (Admin).");
-  return `/operacion/ies/${slug}/submodulos/${submoduloId}/evidencias`;
-}
+  function resumenPathsForSubmodulo(submoduloId) {
+    if (isIES()) {
+      // endpoint mio (y fallback al admin si tu backend no tiene /mio)
+      const iesId = A.state.ies?.id;
+      const arr = [
+        `/api/resumen/mio/submodulo/${submoduloId}`,
+      ];
+      if (iesId) arr.push(`/api/resumen/submodulo/${iesId}/${submoduloId}`);
+      return arr;
+    }
 
-// ----------------------------
-// Resumen
-// ----------------------------
-function resumenUrlForSubmodulo(submoduloId) {
-  // ✅ IES: su propio resumen (NO requiere ies_id en URL)
-  if (isIES()) {
-    return `/api/resumen/mio/submodulo/${submoduloId}`;
+    const iesId =
+      A.state.ies?.id ||
+      (typeof A.getIesId === "function" ? A.getIesId() : null);
+
+    if (!iesId) throw new Error("Falta ies_id para cargar resumen (Admin).");
+    return [`/api/resumen/submodulo/${iesId}/${submoduloId}`];
   }
 
-  // ✅ Admin: necesita ies_id seleccionado
-  const iesId =
-    A.state.ies?.id ||
-    (typeof A.getIesId === "function" ? A.getIesId() : null);
+  async function fetchEvidencias(submoduloId) {
+    return await apiTry(evidenciasPathsForSubmodulo(submoduloId));
+  }
 
-  if (!iesId) throw new Error("Falta ies_id para cargar resumen (Admin).");
-  return `/api/resumen/submodulo/${iesId}/${submoduloId}`;
-}
+  async function fetchResumenSubmodulo(submoduloId) {
+    return await apiTry(resumenPathsForSubmodulo(submoduloId));
+  }
 
-// ----------------------------
-// Fetch helpers
-// ----------------------------
-async function fetchEvidencias(submoduloId) {
-  return await A.api(evidenciasUrlForSubmodulo(submoduloId));
-}
+  async function saveEvidenciaPatch(evidenciaId, payload) {
+    const slug = A.state.ies?.slug;
 
-async function fetchResumenSubmodulo(submoduloId) {
-  return await A.api(resumenUrlForSubmodulo(submoduloId));
-}
+    if (isIES()) {
+      const paths = [
+        `/operacion/evidencias/${evidenciaId}`,
+      ];
+      if (slug) paths.push(`/operacion/ies/${slug}/evidencias/${evidenciaId}`);
+      return await apiTry(paths, { method: "PATCH", body: JSON.stringify(payload) });
+    }
 
-// ----------------------------
-// Save evidencia (PATCH)
-// ----------------------------
-async function saveEvidenciaPatch(evidenciaId, payload) {
-  // ✅ IES: PATCH permitido (no usa slug)
-  if (isIES()) {
-    return await A.api(`/operacion/evidencias/${evidenciaId}`, {
+    if (!slug) throw new Error("Falta ies.slug para guardar evidencia (Admin).");
+    return await A.api(`/operacion/ies/${slug}/evidencias/${evidenciaId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
   }
 
-  // ✅ Admin: PATCH con slug (admin-only)
-  const slug = A.state.ies?.slug;
-  if (!slug) throw new Error("Falta ies.slug para guardar evidencia (Admin).");
+  // ============================================================
+  // Operativa (solo IES)
+  // ============================================================
+  async function openOperativa(submodulo) {
+    safeHideCoach();
 
-  return await A.api(`/operacion/ies/${slug}/evidencias/${evidenciaId}`, {
-    method: "PATCH",
-    body: JSON.stringify(payload),
-  });
-}
+    if (!isIES()) {
+      toastCompat({
+        type: "warning",
+        title: "Modo Admin",
+        msg: "El Admin no llena operativa. Usa Resumen general.",
+        ms: 4200,
+      });
+      return;
+    }
 
+    A.state.activeSubm = submodulo;
+    showOnly("operativa");
+    forceCloseSubmodsDrawer();
 
+    if (!operativaPanel) return;
 
- // ============================================================
-// Operativa (solo IES)
-// ============================================================
-async function openOperativa(submodulo) {
-  hideCoach(false);
-
-  if (!isIES()) {
-    toastCompat({
-      type: "warning",
-      title: "Modo Admin",
-      msg: "El Admin no llena operativa. Usa Resumen general.",
-      ms: 4200,
-    });
-    return;
-  }
-
-  A.state.activeSubm = submodulo;
-  showOnly("operativa");
-  forceCloseSubmodsDrawer();
-
-  if (!operativaPanel) return;
-
-  const iesName = A.state.ies?.nombre || A.state.ies?.slug || "—";
-
-  // skeleton mientras carga
-  operativaPanel.innerHTML = `
-    <div class="container-fluid mt-3">
-      <div class="text-secondary small">OPERATIVA</div>
-      <h4 class="mb-1">${escapeHtml(submodulo?.nombre || "Submódulo")}</h4>
-      <div class="text-secondary small">IES: ${escapeHtml(iesName)}</div>
-      <hr class="my-2" />
-      <div class="text-secondary small">Cargando evidencias…</div>
-    </div>
-  `;
-
-  try {
-    // ✅ endpoint correcto para IES
-    const evidencias = await fetchEvidencias(submodulo.id);
-    const arr = Array.isArray(evidencias) ? evidencias : (evidencias?.items || []);
-
-    // ✅ render tabla bonita
-    operativaPanel.innerHTML = buildOperativaTableHTML(
-      arr,
-      submodulo?.nombre || "Submódulo",
-      iesName
-    );
-
-    // ✅ conecta botones Guardar
-    await wireOperativaTableHandlers(operativaPanel);
-  } catch (e) {
-    console.error(e);
-    toastHttpError(e, "No se pudieron cargar evidencias");
+    const iesName = A.state.ies?.nombre || A.state.ies?.slug || "—";
 
     operativaPanel.innerHTML = `
       <div class="container-fluid mt-3">
-        <div class="text-danger small">No se pudieron cargar evidencias.</div>
-        <button id="btnBackOperativaErr" class="btn btn-outline-light btn-sm mt-2">Volver</button>
+        <div class="text-secondary small">OPERATIVA</div>
+        <h4 class="mb-1">${escapeHtml(submodulo?.nombre || "Submodulo")}</h4>
+        <div class="text-secondary small">IES: ${escapeHtml(iesName)}</div>
+        <hr class="my-2" />
+        <div class="text-secondary small">Cargando evidencias…</div>
       </div>
     `;
 
-    document.getElementById("btnBackOperativaErr")?.addEventListener("click", () => {
-      showOnly("home");
-    });
-  }
-}
+    try {
+      const evidencias = await fetchEvidencias(submodulo.id);
+      const arr = Array.isArray(evidencias) ? evidencias : (evidencias?.items || []);
 
+      operativaPanel.innerHTML = buildOperativaTableHTML(
+        arr,
+        submodulo?.nombre || "Submodulo",
+        iesName
+      );
+
+      await wireOperativaTableHandlers(operativaPanel, saveEvidenciaPatch);
+    } catch (e) {
+      console.error(e);
+      toastHttpError(e, "No se pudieron cargar evidencias");
+
+      operativaPanel.innerHTML = `
+        <div class="container-fluid mt-3">
+          <div class="text-danger small">No se pudieron cargar evidencias.</div>
+          <button id="btnBackOperativaErr" class="btn btn-outline-light btn-sm mt-2">Volver</button>
+        </div>
+      `;
+
+      document.getElementById("btnBackOperativaErr")?.addEventListener("click", () => {
+        showOnly("home");
+      });
+    }
+  }
 
   // ============================================================
-  // Resumen (submódulo)
+  // Resumen (submodulo)
   // ============================================================
   async function openResumenFromPlanner(submodulo) {
-    hideCoach(false);
+    safeHideCoach();
 
     if (isAdminLocked()) {
       showAdminGateIfNeeded();
@@ -1808,7 +1788,7 @@ async function openOperativa(submodulo) {
     resumenPanel.innerHTML = `
       <div class="container-fluid mt-3">
         <div class="text-secondary small">Resumen</div>
-        <h4 class="mb-1">${escapeHtml(submodulo?.nombre || "Submódulo")}</h4>
+        <h4 class="mb-1">${escapeHtml(submodulo?.nombre || "Submodulo")}</h4>
         <div class="text-secondary small">Cargando…</div>
       </div>
     `;
@@ -1833,10 +1813,10 @@ async function openOperativa(submodulo) {
           <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
             <div>
               <div class="text-secondary small">Resumen</div>
-              <h4 class="mb-1">${escapeHtml(submodulo?.nombre || "Submódulo")}</h4>
+              <h4 class="mb-1">${escapeHtml(submodulo?.nombre || "Submodulo")}</h4>
               <div class="text-secondary small">
                 IES: ${escapeHtml(A.state.ies?.nombre || A.state.ies?.slug || "—")}
-                · Submódulo #${escapeHtml(String(submodulo?.id || "—"))}
+                · Submodulo #${escapeHtml(String(submodulo?.id || "—"))}
               </div>
             </div>
             <button id="btnBackFallback" class="btn btn-outline-light btn-sm">Volver</button>
@@ -1865,275 +1845,272 @@ async function openOperativa(submodulo) {
     }
   }
 
-// ============================================================
-// Resumen general (Admin + IES)
-// ============================================================
-function fmtDate(s) {
-  if (!s) return "—";
-  const d = String(s).slice(0, 10);
-  const [y, m, day] = d.split("-");
-  if (!y || !m || !day) return d;
-  return `${day}/${m}/${y}`;
-}
-
-function pickLastUpdated(registros = []) {
-  let best = null;
-  for (const r of registros) {
-    const u = r?.updated_at;
-    if (!u) continue;
-    const t = new Date(u).getTime();
-    if (!Number.isFinite(t)) continue;
-    if (best === null || t > best.t) best = { t, raw: u };
+  // ============================================================
+  // Resumen general (Admin + IES)
+  // ============================================================
+  function fmtDate(s) {
+    if (!s) return "—";
+    const d = String(s).slice(0, 10);
+    const [y, m, day] = d.split("-");
+    if (!y || !m || !day) return d;
+    return `${day}/${m}/${y}`;
   }
-  return best?.raw || null;
-}
 
-function pickResponsable(registros = []) {
-  for (const r of registros) {
-    const v = (r?.responsable ?? "").toString().trim();
-    if (v) return v;
-  }
-  return "—";
-}
-
-async function mapLimit(items, limit, mapper) {
-  const arr = Array.isArray(items) ? items : [];
-  if (!arr.length) return [];
-  const out = new Array(arr.length);
-  let cursor = 0;
-
-  const workers = Array.from({ length: Math.min(limit, arr.length) }, async () => {
-    while (true) {
-      const idx = cursor++;
-      if (idx >= arr.length) break;
-      out[idx] = await mapper(arr[idx], idx);
+  function pickLastUpdated(registros = []) {
+    let best = null;
+    for (const r of registros) {
+      const u = r?.updated_at;
+      if (!u) continue;
+      const t = new Date(u).getTime();
+      if (!Number.isFinite(t)) continue;
+      if (best === null || t > best.t) best = { t, raw: u };
     }
-  });
+    return best?.raw || null;
+  }
 
-  await Promise.all(workers);
-  return out;
-}
+  function pickResponsable(registros = []) {
+    for (const r of registros) {
+      const v = (r?.responsable ?? "").toString().trim();
+      if (v) return v;
+    }
+    return "—";
+  }
 
-function resumenGeneralShellHTML(iesNombre, iesId) {
-  return `
-    <div class="container-fluid mt-3">
-      <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
-        <div>
-          <div class="text-secondary small">RESUMEN GENERAL</div>
-          <h4 class="mb-1">Subprogramas · Submódulos</h4>
-          <div class="text-secondary small">
-            IES: ${escapeHtml(iesNombre)}
-            ${iesId ? `· ID: ${escapeHtml(String(iesId))}` : ""}
+  async function mapLimit(items, limit, mapper) {
+    const arr = Array.isArray(items) ? items : [];
+    if (!arr.length) return [];
+    const out = new Array(arr.length);
+    let cursor = 0;
+
+    const workers = Array.from({ length: Math.min(limit, arr.length) }, async () => {
+      while (true) {
+        const idx = cursor++;
+        if (idx >= arr.length) break;
+        out[idx] = await mapper(arr[idx], idx);
+      }
+    });
+
+    await Promise.all(workers);
+    return out;
+  }
+
+  function resumenGeneralShellHTML(iesNombre, iesId) {
+    return `
+      <div class="container-fluid mt-3">
+        <div class="d-flex align-items-start justify-content-between gap-3 flex-wrap">
+          <div>
+            <div class="text-secondary small">RESUMEN GENERAL</div>
+            <h4 class="mb-1">Subprogramas · Submodulos</h4>
+            <div class="text-secondary small">
+              IES: ${escapeHtml(iesNombre)}
+              ${iesId ? `· ID: ${escapeHtml(String(iesId))}` : ""}
+            </div>
+          </div>
+          <div class="d-flex gap-2">
+            <button id="btnBackRG" class="btn btn-outline-light btn-sm">
+              ${isIES() ? "Volver al mapa" : "Volver"}
+            </button>
           </div>
         </div>
-        <div class="d-flex gap-2">
-          <button id="btnBackRG" class="btn btn-outline-light btn-sm">
-            ${isIES() ? "Volver al mapa" : "Volver"}
-          </button>
+
+        <div id="rgProgress" class="text-secondary small mt-3">Cargando…</div>
+
+        <div class="table-responsive mt-3">
+          <table class="table table-dark table-sm align-middle">
+            <thead>
+              <tr>
+                <th style="min-width:260px;">Subprograma</th>
+                <th style="min-width:320px;">Submodulo</th>
+                <th style="min-width:190px;">Responsable</th>
+                <th class="text-end" style="min-width:110px;">Evidencias</th>
+                <th class="text-end" style="min-width:90px;">Avance</th>
+                <th style="min-width:150px;">Ult. actualizacion</th>
+                <th style="min-width:110px;"></th>
+              </tr>
+            </thead>
+            <tbody id="rgTbody">
+              <tr><td colspan="7" class="text-secondary">Cargando…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="text-secondary small mt-2">
+          Abre un submodulo con <b>Ver</b> para revisar su resumen completo.
         </div>
       </div>
-
-      <div id="rgProgress" class="text-secondary small mt-3">Cargando…</div>
-
-      <div class="table-responsive mt-3">
-        <table class="table table-dark table-sm align-middle">
-          <thead>
-            <tr>
-              <th style="min-width:260px;">Subprograma</th>
-              <th style="min-width:320px;">Submódulo</th>
-              <th style="min-width:190px;">Responsable</th>
-              <th class="text-end" style="min-width:110px;">Evidencias</th>
-              <th class="text-end" style="min-width:90px;">Avance</th>
-              <th style="min-width:150px;">Últ. actualización</th>
-              <th style="min-width:110px;"></th>
-            </tr>
-          </thead>
-          <tbody id="rgTbody">
-            <tr><td colspan="7" class="text-secondary">Cargando…</td></tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="text-secondary small mt-2">
-        Abre un submódulo con <b>Ver</b> para revisar su resumen completo.
-      </div>
-    </div>
-  `;
-}
-
-async function openResumenGeneral() {
-  hideCoach(false);
-
-  if (!resumenPanel) return;
-
-  // Admin necesita IES seleccionada
-  if (isAdminLocked()) {
-    toastCompat({
-      type: "warning",
-      title: "Falta IES",
-      msg: "Selecciona una IES para abrir el Resumen general.",
-      ms: 4200,
-    });
-    showAdminGateIfNeeded();
-    return;
+    `;
   }
 
-  const iesNombre = A.state.ies?.nombre || A.state.ies?.slug || "—";
-  const iesId = A.state.ies?.id || null;
+  async function openResumenGeneral() {
+    safeHideCoach();
 
-  showOnly("resumen");
-  forceCloseSubmodsDrawer();
-  setHidden(resumenPanel, false);
+    if (!resumenPanel) return;
 
-  resumenPanel.innerHTML = resumenGeneralShellHTML(iesNombre, iesId);
-
-  document.getElementById("btnBackRG")?.addEventListener("click", () => {
-    // IES vuelve al home mapa, Admin vuelve al home (con selector)
-    showOnly("home");
-  });
-
-  const rgProgress = document.getElementById("rgProgress");
-  const rgTbody = document.getElementById("rgTbody");
-
-  try {
-    if (rgProgress) rgProgress.textContent = "Cargando catálogo de subprogramas…";
-    const subprogramas = await A.api("/catalogo/subprogramas");
-    const sps = Array.isArray(subprogramas) ? subprogramas : [];
-
-    if (!sps.length) {
-      if (rgTbody) rgTbody.innerHTML = `<tr><td colspan="7" class="text-secondary">No hay subprogramas.</td></tr>`;
-      if (rgProgress) rgProgress.textContent = "Listo.";
+    if (isAdminLocked()) {
+      toastCompat({
+        type: "warning",
+        title: "Falta IES",
+        msg: "Selecciona una IES para abrir el Resumen general.",
+        ms: 4200,
+      });
+      showAdminGateIfNeeded();
       return;
     }
 
-    if (rgProgress) rgProgress.textContent = "Cargando submódulos…";
-    const rows = [];
+    const iesNombre = A.state.ies?.nombre || A.state.ies?.slug || "—";
+    const iesId = A.state.ies?.id || null;
 
-    for (const sp of sps) {
-      const spId = sp?.id;
-      const spName = sp?.nombre || `Subprograma ${spId}`;
-      if (!spId) continue;
+    showOnly("resumen");
+    forceCloseSubmodsDrawer();
+    setHidden(resumenPanel, false);
 
-      const sms = await A.api(`/catalogo/subprogramas/${spId}/submodulos`);
-      const list = Array.isArray(sms) ? sms : [];
+    resumenPanel.innerHTML = resumenGeneralShellHTML(iesNombre, iesId);
 
-      for (const sm of list) {
-        if (!sm?.id) continue;
-        rows.push({
-          spId,
-          spName,
-          smId: sm.id,
-          smName: sm.nombre || `Submódulo ${sm.id}`,
-        });
-      }
-    }
-
-    if (!rows.length) {
-      if (rgTbody) rgTbody.innerHTML = `<tr><td colspan="7" class="text-secondary">No hay submódulos.</td></tr>`;
-      if (rgProgress) rgProgress.textContent = "Listo.";
-      return;
-    }
-
-    let done = 0;
-    if (rgProgress) rgProgress.textContent = `Cargando resúmenes: 0/${rows.length}…`;
-
-    const results = await mapLimit(rows, 4, async (row) => {
-      try {
-        const data = await fetchResumenSubmodulo(row.smId);
-        return { ok: true, row, data };
-      } catch (e) {
-        console.error("Resumen submódulo falló:", row.smId, e);
-        return { ok: false, row, err: e };
-      } finally {
-        done++;
-        if (rgProgress) rgProgress.textContent = `Cargando resúmenes: ${done}/${rows.length}…`;
-      }
+    document.getElementById("btnBackRG")?.addEventListener("click", () => {
+      showOnly("home");
     });
 
-    if (rgProgress) rgProgress.textContent = `Listo ✓ (${rows.length} submódulos)`;
+    const rgProgress = document.getElementById("rgProgress");
+    const rgTbody = document.getElementById("rgTbody");
 
-    if (rgTbody) {
-      rgTbody.innerHTML = results
-        .map((r) => {
-          const sp = escapeHtml(r.row.spName);
-          const sm = escapeHtml(r.row.smName);
+    try {
+      if (rgProgress) rgProgress.textContent = "Cargando catalogo de subprogramas…";
+      const subprogramas = await A.api("/catalogo/subprogramas");
+      const sps = Array.isArray(subprogramas) ? subprogramas : [];
 
-          // si falló, igual dejamos botón "Ver"
-          if (!r.ok) {
+      if (!sps.length) {
+        if (rgTbody) rgTbody.innerHTML = `<tr><td colspan="7" class="text-secondary">No hay subprogramas.</td></tr>`;
+        if (rgProgress) rgProgress.textContent = "Listo.";
+        return;
+      }
+
+      if (rgProgress) rgProgress.textContent = "Cargando submodulos…";
+      const rows = [];
+
+      for (const sp of sps) {
+        const spId = sp?.id;
+        const spName = sp?.nombre || `Subprograma ${spId}`;
+        if (!spId) continue;
+
+        const sms = await A.api(`/catalogo/subprogramas/${spId}/submodulos`);
+        const list = Array.isArray(sms) ? sms : [];
+
+        for (const sm of list) {
+          if (!sm?.id) continue;
+          rows.push({
+            spId,
+            spName,
+            smId: sm.id,
+            smName: sm.nombre || `Submodulo ${sm.id}`,
+          });
+        }
+      }
+
+      if (!rows.length) {
+        if (rgTbody) rgTbody.innerHTML = `<tr><td colspan="7" class="text-secondary">No hay submodulos.</td></tr>`;
+        if (rgProgress) rgProgress.textContent = "Listo.";
+        return;
+      }
+
+      let done = 0;
+      if (rgProgress) rgProgress.textContent = `Cargando resumenes: 0/${rows.length}…`;
+
+      const results = await mapLimit(rows, 4, async (row) => {
+        try {
+          const data = await fetchResumenSubmodulo(row.smId);
+          return { ok: true, row, data };
+        } catch (e) {
+          console.error("Resumen submodulo fallo:", row.smId, e);
+          return { ok: false, row, err: e };
+        } finally {
+          done++;
+          if (rgProgress) rgProgress.textContent = `Cargando resumenes: ${done}/${rows.length}…`;
+        }
+      });
+
+      if (rgProgress) rgProgress.textContent = `Listo ✓ (${rows.length} submodulos)`;
+
+      if (rgTbody) {
+        rgTbody.innerHTML = results
+          .map((r) => {
+            const sp = escapeHtml(r.row.spName);
+            const sm = escapeHtml(r.row.smName);
+
+            if (!r.ok) {
+              return `
+                <tr>
+                  <td style="opacity:.85;">${sp}</td>
+                  <td style="font-weight:700;">${sm}</td>
+                  <td class="text-secondary small">—</td>
+                  <td class="text-end">0</td>
+                  <td class="text-end">0%</td>
+                  <td class="text-secondary small">—</td>
+                  <td class="text-end">
+                    <button class="btn btn-outline-light btn-sm rg-open" data-smid="${r.row.smId}">Ver</button>
+                  </td>
+                </tr>
+              `;
+            }
+
+            const data = r.data || {};
+            const registros = Array.isArray(data?.registros) ? data.registros : [];
+
+            const responsable =
+              (data?.responsable_mas_reciente || "").toString().trim() ||
+              pickResponsable(registros);
+
+            const evid = Number(data?.evidencias_total ?? 0);
+            const av = Math.max(0, Math.min(100, Number(data?.avance_promedio ?? 0)));
+
+            const lastUpdRaw =
+              data?.last_updated ||
+              data?.ultima_actualizacion ||
+              pickLastUpdated(registros);
+
+            const lastUpd = fmtDate(lastUpdRaw);
+
             return `
               <tr>
                 <td style="opacity:.85;">${sp}</td>
                 <td style="font-weight:700;">${sm}</td>
-                <td class="text-secondary small">—</td>
-                <td class="text-end">0</td>
-                <td class="text-end">0%</td>
-                <td class="text-secondary small">—</td>
+                <td class="text-secondary small">${escapeHtml(responsable || "—")}</td>
+                <td class="text-end">${Number.isFinite(evid) ? evid : 0}</td>
+                <td class="text-end">${Math.round(Number.isFinite(av) ? av : 0)}%</td>
+                <td class="text-secondary small">${escapeHtml(lastUpd)}</td>
                 <td class="text-end">
                   <button class="btn btn-outline-light btn-sm rg-open" data-smid="${r.row.smId}">Ver</button>
                 </td>
               </tr>
             `;
-          }
+          })
+          .join("");
 
-          const data = r.data || {};
-          const registros = Array.isArray(data?.registros) ? data.registros : [];
+        rgTbody.onclick = async (ev) => {
+          const btn = ev.target.closest(".rg-open");
+          if (!btn) return;
 
-          const responsable =
-            (data?.responsable_mas_reciente || "").toString().trim() ||
-            pickResponsable(registros);
+          const smId = Number(btn.dataset.smid);
+          const sm = rows.find((x) => x.smId === smId);
+          if (!sm) return;
 
-          const evid = Number(data?.evidencias_total ?? 0);
-          const av = Math.max(0, Math.min(100, Number(data?.avance_promedio ?? 0)));
-
-          const lastUpdRaw =
-            data?.last_updated ||
-            data?.ultima_actualizacion ||
-            pickLastUpdated(registros);
-
-          const lastUpd = fmtDate(lastUpdRaw);
-
-          return `
-            <tr>
-              <td style="opacity:.85;">${sp}</td>
-              <td style="font-weight:700;">${sm}</td>
-              <td class="text-secondary small">${escapeHtml(responsable || "—")}</td>
-              <td class="text-end">${Number.isFinite(evid) ? evid : 0}</td>
-              <td class="text-end">${Math.round(Number.isFinite(av) ? av : 0)}%</td>
-              <td class="text-secondary small">${escapeHtml(lastUpd)}</td>
-              <td class="text-end">
-                <button class="btn btn-outline-light btn-sm rg-open" data-smid="${r.row.smId}">Ver</button>
-              </td>
-            </tr>
-          `;
-        })
-        .join("");
-
-      rgTbody.onclick = async (ev) => {
-        const btn = ev.target.closest(".rg-open");
-        if (!btn) return;
-
-        const smId = Number(btn.dataset.smid);
-        const sm = rows.find((x) => x.smId === smId);
-        if (!sm) return;
-
-        await openResumenFromPlanner({ id: sm.smId, nombre: sm.smName });
-      };
+          await openResumenFromPlanner({ id: sm.smId, nombre: sm.smName });
+        };
+      }
+    } catch (e) {
+      console.error(e);
+      toastHttpError(e, "No se pudo construir el resumen general");
+      if (rgTbody) {
+        rgTbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="text-danger small">
+              No se pudo construir el resumen general.
+            </td>
+          </tr>
+        `;
+      }
+      if (rgProgress) rgProgress.textContent = "Error.";
     }
-  } catch (e) {
-    console.error(e);
-    toastHttpError(e, "No se pudo construir el resumen general");
-    if (rgTbody) {
-      rgTbody.innerHTML = `
-        <tr>
-          <td colspan="7" class="text-danger small">
-            No se pudo construir el resumen general.
-          </td>
-        </tr>
-      `;
-    }
-    if (rgProgress) rgProgress.textContent = "Error.";
   }
-}
 
   // ============================================================
   // Events (map + drawer) — SOLO IES
@@ -2144,20 +2121,20 @@ async function openResumenGeneral() {
     const node = ev.target.closest(".subp-node");
     if (!node) return;
 
-    hideCoach(false);
+    safeHideCoach();
 
     const id = Number(node.dataset.id);
     setActiveSubp(id);
 
-    if (submodulosList) submodulosList.innerHTML = `<div class="text-secondary small">Cargando submódulos…</div>`;
+    if (submodulosList) submodulosList.innerHTML = `<div class="text-secondary small">Cargando submodulos…</div>`;
     openSubmodsDrawer();
 
     try {
       await loadSubmodulos(id);
     } catch (e) {
       console.error(e);
-      toastHttpError(e, "No se pudieron cargar submódulos");
-      if (submodulosList) submodulosList.innerHTML = `<div class="text-danger small">Error cargando submódulos.</div>`;
+      toastHttpError(e, "No se pudieron cargar submodulos");
+      if (submodulosList) submodulosList.innerHTML = `<div class="text-danger small">Error cargando submodulos.</div>`;
     }
   });
 
@@ -2170,7 +2147,7 @@ async function openResumenGeneral() {
     const item = ev.target.closest(".subm-item");
     if (!item) return;
 
-    hideCoach(false);
+    safeHideCoach();
 
     const id = Number(item.dataset.id);
     const sm = A.state.submodulos.find((x) => x.id === id) || null;
@@ -2191,7 +2168,7 @@ async function openResumenGeneral() {
     if (rgBusy) return;
     rgBusy = true;
 
-    hideCoach(false);
+    safeHideCoach();
 
     const oldText = btnResumenGlobal?.textContent;
     if (btnResumenGlobal) {
@@ -2211,7 +2188,7 @@ async function openResumenGeneral() {
   });
 
   btnReset?.addEventListener("click", () => {
-    hideCoach(false);
+    safeHideCoach();
 
     A.state.activeSubp = null;
     A.state.activeSubm = null;
@@ -2256,16 +2233,15 @@ async function openResumenGeneral() {
       return;
     }
 
-    // IES normal
     showOnly("home");
     renderSubprogramas();
   } catch (err) {
     console.error(err);
-    if (field) field.innerHTML = `<div class="text-danger small">Error cargando catálogo.</div>`;
-    toastCompat ({
+    if (field) field.innerHTML = `<div class="text-danger small">Error cargando catalogo.</div>`;
+    toastCompat({
       type: "danger",
       title: "Error",
-      msg: "No se pudo cargar el catálogo. Revisa consola/endpoint.",
+      msg: "No se pudo cargar el catalogo. Revisa consola/endpoint.",
       ms: 6500,
     });
   }
