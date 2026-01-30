@@ -209,20 +209,18 @@ const canvas =
   const constellation = document.querySelector(".constellation");
 
 // ============================================================
-//  Coach Astra (TOUR 4 pasos + 4 imagenes) - Admin + IES (V4.2)
-//  - FIX: sin llaves sobrantes (no rompe el planner)
-//  - FIX: targets virtuales para "panel derecho" aunque este cerrado
-//  - FIX: imagenes NO gigantes (checklist mas pequena + maxHeight)
-//  - FIX: astra_exit siempre aparece (fallback chain por nombres)
+//  Coach Astra (TOUR 4 pasos + 4 imagenes) - Admin + IES (V4.3)
+//  - point: Astra mas a la izquierda para apuntar a la derecha
+//  - checklist: mas pequena y mas centrada en constelacion
+//  - exit: fallback robusto (si no existe, no desaparece)
 // ============================================================
-(function AstraCoachV42() {
+(function AstraCoachV43() {
   if (window.__astraCoachV4) return;
   window.__astraCoachV4 = true;
 
   const A = (window.ASTRA = window.ASTRA || {});
   const COACH_KEY = "astra_onboarding_v2_done";
 
-  // Limpia restos de versiones anteriores
   try {
     document.querySelectorAll(".astra-coach").forEach((n) => n.remove());
     document.querySelectorAll(".astra-virtual-target").forEach((n) => n.remove());
@@ -233,15 +231,11 @@ const canvas =
   let coachStep = 0;
   let coachLastTarget = null;
 
-  // --------------------------
-  // Helpers visibles/targets
-  // --------------------------
   function qsLocal(sel) { return document.querySelector(sel); }
 
   function isVisible(el) {
     if (!el) return false;
 
-    // targets virtuales: cuentan como visibles
     if (el.classList && el.classList.contains("astra-virtual-target")) {
       const r = el.getBoundingClientRect();
       return r.width > 0 && r.height > 0;
@@ -269,9 +263,6 @@ const canvas =
     try { el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" }); } catch {}
   }
 
-  // --------------------------
-  // Role safe
-  // --------------------------
   function getRoleSafe() {
     try {
       if (typeof A.getRole === "function") {
@@ -283,10 +274,7 @@ const canvas =
     return role || "ies";
   }
 
-  // --------------------------
-  // Target virtual (panel derecho aunque este cerrado)
-  // --------------------------
-  function ensureVirtualTarget(id, rect /* {left, top, width, height} */) {
+  function ensureVirtualTarget(id, rect) {
     let el = document.getElementById(id);
     if (!el) {
       el = document.createElement("div");
@@ -325,9 +313,6 @@ const canvas =
     return el;
   }
 
-  // --------------------------
-  // Coach DOM
-  // --------------------------
   function ensureCoach() {
     if (coach) return coach;
 
@@ -384,38 +369,52 @@ const canvas =
       btnBack: bubble.querySelector(".astra-coach__back"),
       btnNext: bubble.querySelector(".astra-coach__next"),
       _cleanup: null,
+      currentPose: "point",
     };
 
     return coach;
   }
 
-  // --------------------------
-  // Poses / assets (ROBUSTO + NO GIGANTE)
-  // --------------------------
+  // -------- Poses / assets (EXIT robusto) --------
   function setCoachPose(pose = "point") {
     const c = ensureCoach();
+    c.currentPose = pose;
 
-    // candidatos por pose (por si el archivo real se llama distinto)
     const poseCandidates = {
       saludo: [
         "/static/img/astra_saludo.png",
+        "/static/img/astra_saludo.PNG",
         "/static/img/astra_saludo.webp",
+        "/static/img/astra_saludo.jpg",
+        "/static/img/astra_saludo.jpeg",
         "/static/img/astra_hello.png",
       ],
       point: [
         "/static/img/astra_point.png",
+        "/static/img/astra_point.PNG",
         "/static/img/astra_point.webp",
+        "/static/img/astra_point.jpg",
+        "/static/img/astra_point.jpeg",
         "/static/img/astra_pointer.png",
       ],
       checklist: [
         "/static/img/astra_checklist.png",
+        "/static/img/astra_checklist.PNG",
         "/static/img/astra_checklist.webp",
+        "/static/img/astra_checklist.jpg",
+        "/static/img/astra_checklist.jpeg",
         "/static/img/astra_lista.png",
       ],
       exit: [
         "/static/img/astra_exit.png",
+        "/static/img/astra_exit.PNG",
+        "/static/img/astra_exit.webp",
+        "/static/img/astra_exit.jpg",
+        "/static/img/astra_exit.jpeg",
         "/static/img/astra_salida.png",
+        "/static/img/astra_salida.webp",
         "/static/img/astra_out.png",
+        "/static/img/astra_bye.png",
       ],
     };
 
@@ -423,6 +422,8 @@ const canvas =
       "/static/img/astra.png",
       "/static/img/astra.webp",
       "/static/img/astra.jpg",
+      // ultima bala: nunca desaparece -> usa point
+      "/static/img/astra_point.png",
     ];
 
     const list = [...(poseCandidates[pose] || poseCandidates.point), ...fallbacks];
@@ -440,35 +441,28 @@ const canvas =
     c.img.onerror = () => tryNext();
     c.img.src = list[i];
 
-    // --------------------------
-    // Tamaño CONTROLADO (lo que pediste)
-    // checklist mas pequeña
-    // maxHeight para que nunca tape la pantalla
-    // --------------------------
+    // Tamaños por pose (CHECKLIST mas pequena)
     const vw = Math.max(320, window.innerWidth || 1200);
 
     const baseByPose = {
-      saludo: 260,
-      point: 290,
-      checklist: 240, // <- mas pequeña
-      exit: 240,
+      saludo: 250,
+      point: 280,
+      checklist: 210, // MAS PEQUENA
+      exit: 220,
     };
 
-    const base = baseByPose[pose] || 270;
-    const maxW = vw < 520 ? 200 : vw < 900 ? 240 : 290;
+    const base = baseByPose[pose] || 260;
+    const maxW = vw < 520 ? 190 : vw < 900 ? 230 : 280;
 
     c.img.style.width = `${Math.min(base, maxW)}px`;
-    c.img.style.maxWidth = "300px";
-    c.img.style.maxHeight = "52vh";
+    c.img.style.maxWidth = "290px";
+    c.img.style.maxHeight = "48vh";
     c.img.style.height = "auto";
     c.img.style.objectFit = "contain";
     c.img.style.display = "block";
     c.img.style.opacity = "1";
   }
 
-  // --------------------------
-  // Highlight target
-  // --------------------------
   function clearCoachTargetHighlight() {
     if (coachLastTarget && coachLastTarget.classList) {
       coachLastTarget.classList.remove("astra-coach--target");
@@ -483,9 +477,7 @@ const canvas =
     coachLastTarget = targetEl;
   }
 
-  // --------------------------
-  // Positioning (burbuja cerca del recuadro + Astra afuera)
-  // --------------------------
+  // -------- Positioning --------
   function positionCoachToTarget(targetEl) {
     const c = ensureCoach();
     const pad = 12;
@@ -503,8 +495,8 @@ const canvas =
     const bh = c.bubble.offsetHeight || 150;
     c.bubble.style.visibility = "visible";
 
-    // preferencia: burbuja pegada al recuadro (si target está muy a la derecha => burbuja a la izquierda)
-    const preferLeft = cx > window.innerWidth * 0.6;
+    // burbuja pegada al recuadro
+    const preferLeft = cx > window.innerWidth * 0.58;
 
     const candidates = preferLeft
       ? [
@@ -534,11 +526,10 @@ const canvas =
     c.bubble.style.left = `${bx}px`;
     c.bubble.style.top = `${by}px`;
 
-    // dot al centro del target
+    // dot y linea
     c.dot.style.left = `${cx - 5}px`;
     c.dot.style.top = `${cy - 5}px`;
 
-    // linea del centro burbuja al target
     const bcx = bx + bw / 2;
     const bcy = by + bh / 2;
     const dx = cx - bcx;
@@ -551,20 +542,42 @@ const canvas =
     c.line.style.width = `${len}px`;
     c.line.style.transform = `rotate(${ang}rad)`;
 
-    // Astra: siempre al lado opuesto de la burbuja (afuera) para que "apunte"
-    const imgW = parseFloat(getComputedStyle(c.img).width) || 260;
+    // -------- Astra placement por pose --------
+    const imgW = parseFloat(getComputedStyle(c.img).width) || 240;
     const imgH = imgW * 1.05;
-
-    const offX = imgW * 1.05;
-    const offY = imgH * 0.20;
 
     let ax = cx;
     let ay = cy;
 
-    if (chosen.name === "left")  { ax = cx + offX; ay = cy + offY; }
-    if (chosen.name === "right") { ax = cx - offX; ay = cy + offY; }
-    if (chosen.name === "top")   { ax = cx - imgW * 0.20; ay = cy + imgH * 0.70; }
-    if (chosen.name === "bottom"){ ax = cx - imgW * 0.20; ay = cy - imgH * 0.40; }
+    // 1) POSE POINT: SIEMPRE a la izquierda del target (para apuntar a la derecha)
+    if (c.currentPose === "point") {
+      ax = cx - (imgW * 1.25);      // MAS A LA IZQUIERDA
+      ay = cy + (imgH * 0.10);
+    }
+    // 2) POSE CHECKLIST: centrada en la constelacion (pero apuntando hacia el panel/target)
+    else if (c.currentPose === "checklist") {
+      const cons = document.querySelector(".constellation") || document.getElementById("subprogramasField");
+      if (cons && isVisible(cons)) {
+        const cr = cons.getBoundingClientRect();
+        const ccx = cr.left + cr.width * 0.50;  // centro de constelacion
+        const ccy = cr.top + cr.height * 0.58;
+        ax = ccx - (imgW * 1.05);               // pegada al centro, pero a la izquierda
+        ay = ccy - (imgH * 0.25);
+      } else {
+        ax = cx - (imgW * 1.10);
+        ay = cy - (imgH * 0.10);
+      }
+    }
+    // 3) SALUDO / EXIT: un poco mas neutral (opuesto a burbuja)
+    else {
+      const offX = imgW * 1.05;
+      const offY = imgH * 0.20;
+
+      if (chosen.name === "left")  { ax = cx + offX; ay = cy + offY; }
+      if (chosen.name === "right") { ax = cx - offX; ay = cy + offY; }
+      if (chosen.name === "top")   { ax = cx - imgW * 0.20; ay = cy + imgH * 0.70; }
+      if (chosen.name === "bottom"){ ax = cx - imgW * 0.20; ay = cy - imgH * 0.40; }
+    }
 
     ax = clamp(ax, -80, window.innerWidth + 80);
     ay = clamp(ay, -80, window.innerHeight + 80);
@@ -573,9 +586,6 @@ const canvas =
     c.img.style.top = `${ay}px`;
   }
 
-  // --------------------------
-  // Public show/hide
-  // --------------------------
   function showCoach({ target, text, pose = "point", step = 1, total = 4, autoCloseMs = 0 } = {}) {
     const c = ensureCoach();
 
@@ -595,7 +605,6 @@ const canvas =
     c.root.style.display = "block";
     applyCoachTargetHighlight(target);
 
-    // si es target real, lo centramos
     if (!target.classList?.contains("astra-virtual-target")) {
       scrollIntoViewSmart(target);
     }
@@ -640,7 +649,6 @@ const canvas =
     try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
   }
 
-  // Exporta para evitar ReferenceError
   A.showCoach = showCoach;
   A.hideCoach = hideCoach;
   A.shouldAutoCoach = shouldAutoCoach;
@@ -650,7 +658,7 @@ const canvas =
   window.shouldAutoCoach = shouldAutoCoach;
 
   // --------------------------
-  // TOUR (sin abrir paneles, con target virtual derecha)
+  // TOUR
   // --------------------------
   function getTourSteps() {
     const role = getRoleSafe();
@@ -676,7 +684,6 @@ const canvas =
       document.querySelector(".astra-brand") ||
       document.body;
 
-    // target virtual para "panel derecho" (como tu recuadro dibujado)
     const rightPanelAnchor = () =>
       ensureVirtualTarget("astraVirtualRightPanel", {
         left: "76%",
@@ -710,7 +717,6 @@ const canvas =
       ];
     }
 
-    // IES (cliente)
     return [
       {
         pose: "saludo",
@@ -725,7 +731,6 @@ const canvas =
       {
         pose: "checklist",
         text: "Paso 2: cuando se abra el panel derecho, elige un submodulo para registrar evidencias.",
-        // Si el offcanvas esta abierto se usa real; si no, virtual
         target: () => pickTarget(["#submodsCanvas.show", "#submodulosList"]) || rightPanelAnchor(),
       },
       {
@@ -771,10 +776,8 @@ const canvas =
     renderTourStep();
   }
 
-  // API boton "Guia"
   A.openGuide = function () { tourStart(); };
 
-  // Cablear boton Guia (sin duplicar)
   const btnGuideEl = document.getElementById("btnGuide");
   if (btnGuideEl && !btnGuideEl.dataset.wiredGuide) {
     btnGuideEl.dataset.wiredGuide = "1";
@@ -784,16 +787,13 @@ const canvas =
     });
   }
 
-  // Auto onboarding (solo 1 vez) — sin DOMContentLoaded extra
   function autoStartIfNeeded() {
     if (!shouldAutoCoach()) return;
     setTimeout(() => { try { tourStart(); } catch {} }, 350);
   }
   autoStartIfNeeded();
 
-})(); 
-
-
+})();
 
 
 
