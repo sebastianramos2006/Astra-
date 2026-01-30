@@ -549,6 +549,20 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       c.bubble.style.left = `${bx}px`;
       c.bubble.style.top = `${by}px`;
+      // Lado REAL donde quedo la burbuja (despues del clamp)
+      const bubbleCenterX = bx + bw / 2;
+      const bubbleCenterY = by + bh / 2;
+
+      const dxB = bubbleCenterX - cx;
+      const dyB = bubbleCenterY - cy;
+
+      let bubbleSide = "right";
+      if (Math.abs(dxB) >= Math.abs(dyB)) {
+        bubbleSide = dxB < 0 ? "left" : "right";
+      } else {
+        bubbleSide = dyB < 0 ? "top" : "bottom";
+      }
+
 
       c.dot.style.left = `${cx - 5}px`;
       c.dot.style.top = `${cy - 5}px`;
@@ -590,27 +604,44 @@ document.addEventListener("DOMContentLoaded", async () => {
         ax = cx - (imgW * 0.90);
         ay = cy + (imgH * 0.08);
       } else if (c.currentPose === "exit") {
-        ax = cx - (imgW * 0.92);
-        ay = cy + (imgH * 0.10);
-      } else {
-        const offX = imgW * 1.05;
-        const offY = imgH * 0.20;
+      const offX = imgW * 1.10;
+      const offY = imgH * 0.10;
 
-        if (chosen.name === "left")  { ax = cx + offX; ay = cy + offY; }
-        if (chosen.name === "right") { ax = cx - offX; ay = cy + offY; }
-        if (chosen.name === "top")   { ax = cx - imgW * 0.20; ay = cy + imgH * 0.70; }
-        if (chosen.name === "bottom"){ ax = cx - imgW * 0.20; ay = cy - imgH * 0.40; }
+      // Astra SIEMPRE al lado contrario de la burbuja
+      if (bubbleSide === "left") {
+        ax = cx + offX;
+        ay = cy + offY;
+      } else if (bubbleSide === "right") {
+        ax = cx - offX;
+        ay = cy + offY;
+      } else if (bubbleSide === "top") {
+        ax = cx - imgW * 0.15;
+        ay = cy + imgH * 0.85;
+      } else { // bottom
+        ax = cx - imgW * 0.15;
+        ay = cy - imgH * 0.55;
       }
 
-      ax = clamp(ax, -80, window.innerWidth + 80);
-      ay = clamp(ay, -80, window.innerHeight + 80);
+    } else {
+      const offX = imgW * 1.05;
+      const offY = imgH * 0.20;
 
-      c.img.style.left = `${ax}px`;
-      c.img.style.top = `${ay}px`;
-
-      // ring update
-      applyCoachTargetHighlight(targetEl);
+      if (chosen.name === "left")  { ax = cx + offX; ay = cy + offY; }
+      if (chosen.name === "right") { ax = cx - offX; ay = cy + offY; }
+      if (chosen.name === "top")   { ax = cx - imgW * 0.20; ay = cy + imgH * 0.70; }
+      if (chosen.name === "bottom"){ ax = cx - imgW * 0.20; ay = cy - imgH * 0.40; }
     }
+
+    // Clamp REAL (para que no se vaya fuera de pantalla)
+    ax = clamp(ax, 10, window.innerWidth - imgW - 10);
+    ay = clamp(ay, 10, window.innerHeight - imgH - 10);
+
+    c.img.style.left = `${ax}px`;
+    c.img.style.top = `${ay}px`;
+
+    // ring update
+    applyCoachTargetHighlight(targetEl);
+  }
 
     function showCoach({ target, text, pose = "point", step = 1, total = 4, autoCloseMs = 0 } = {}) {
       const c = ensureCoach();
