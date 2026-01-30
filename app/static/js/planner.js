@@ -209,13 +209,10 @@ const canvas =
   const constellation = document.querySelector(".constellation");
 
 // ============================================================
-//  Coach Astra (TOUR 4 pasos + 4 imagenes) - Admin + IES (V4)
-//  FIXES:
-//  - NO inyecta CSS (usa planner.css)
-//  - expone showCoach/hideCoach/shouldAutoCoach (evita ReferenceError)
-//  - limpia coaches viejos / evita duplicados
-//  - posiciona Astra sin tapar burbuja
-//  - auto-onboarding solo 1 vez + boton Guia
+//  Coach Astra (TOUR 4 pasos + 4 imagenes) - Admin + IES (V4.1)
+//  - FIX: sin llaves sobrantes (no rompe el planner)
+//  - FIX: targets virtuales para "panel derecho" aunque esté cerrado
+//  - Astra grande afuera + burbuja cerca del recuadro (como tus imágenes)
 // ============================================================
 (function AstraCoachV4() {
   if (window.__astraCoachV4) return;
@@ -227,8 +224,6 @@ const canvas =
   // Limpia restos de versiones anteriores
   try {
     document.querySelectorAll(".astra-coach").forEach((n) => n.remove());
-    const oldStyle = document.getElementById("astraCoachStylesV3");
-    if (oldStyle) oldStyle.remove();
   } catch {}
 
   let coach = null;
@@ -239,19 +234,28 @@ const canvas =
   // --------------------------
   // Helpers visibles/targets
   // --------------------------
-  function qs(sel) { return document.querySelector(sel); }
+  function qsLocal(sel) { return document.querySelector(sel); }
 
   function isVisible(el) {
     if (!el) return false;
+
+    // targets virtuales: siempre cuentan como visibles
+    if (el.classList && el.classList.contains("astra-virtual-target")) {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    }
+
     const cs = getComputedStyle(el);
-    if (cs.display === "none" || cs.visibility === "hidden" || cs.opacity === "0") return false;
+    if (cs.display === "none" || cs.visibility === "hidden") return false;
+    if (cs.opacity === "0") return false;
+
     const rects = el.getClientRects();
     return rects && rects.length > 0;
   }
 
   function pickTarget(candidates = []) {
     for (const c of candidates) {
-      const el = typeof c === "string" ? qs(c) : c;
+      const el = typeof c === "string" ? qsLocal(c) : c;
       if (el && isVisible(el)) return el;
     }
     return null;
@@ -260,9 +264,7 @@ const canvas =
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
   function scrollIntoViewSmart(el) {
-    try {
-      el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
-    } catch {}
+    try { el.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" }); } catch {}
   }
 
   // --------------------------
@@ -275,9 +277,51 @@ const canvas =
         if (r) return r;
       }
     } catch {}
-    // fallback suave
     const role = String(A?.state?.user?.role || A?.state?.role || "").toLowerCase().trim();
     return role || "ies";
+  }
+
+  // --------------------------
+  // Target virtual (para panel derecho aunque esté cerrado)
+  // --------------------------
+  function ensureVirtualTarget(id, rect /* {left, top, width, height} en px o % */) {
+    let el = document.getElementById(id);
+    if (!el) {
+      el = document.createElement("div");
+      el.id = id;
+      el.className = "astra-virtual-target";
+      el.style.position = "fixed";
+      el.style.zIndex = "9997";
+      el.style.pointerEvents = "none";
+      // OJO: no puede ser opacity 0 porque isVisible lo bloquearía (salvo virtual); igual lo dejamos casi invisible
+      el.style.opacity = "0.001";
+      el.style.borderRadius = "14px";
+      document.body.appendChild(el);
+    }
+
+    const vw = window.innerWidth || 1200;
+    const vh = window.innerHeight || 800;
+
+    const px = (val, total) => {
+      if (typeof val === "string" && val.trim().endsWith("%")) {
+        const p = parseFloat(val);
+        return (total * (Number.isFinite(p) ? p : 0)) / 100;
+      }
+      const n = Number(val);
+      return Number.isFinite(n) ? n : 0;
+    };
+
+    const left = px(rect.left, vw);
+    const top = px(rect.top, vh);
+    const width = px(rect.width, vw);
+    const height = px(rect.height, vh);
+
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+    el.style.width = `${Math.max(40, width)}px`;
+    el.style.height = `${Math.max(40, height)}px`;
+
+    return el;
   }
 
   // --------------------------
@@ -357,27 +401,18 @@ const canvas =
       exit: "/static/img/astra_exit.png",
     };
 
-    // fallback chain
-    const trySrc = (src, fallback1, fallback2) => {
+    const src = mapPose[pose] || mapPose.point;
+    c.img.onerror = null;
+    c.img.src = src;
+    c.img.onerror = () => {
       c.img.onerror = null;
-      c.img.src = src;
-      c.img.onerror = () => {
-        c.img.onerror = null;
-        c.img.src = fallback1;
-        c.img.onerror = () => {
-          c.img.onerror = null;
-          c.img.src = fallback2;
-        };
-      };
+      c.img.src = "/static/img/astra.png";
     };
 
-    const src = mapPose[pose] || mapPose.point;
-    trySrc(src, "/static/img/astra.png", "/static/img/astra.jpg");
-
-    // Ajuste tamaño seguro (evita "gigante")
+    // tamaño controlado
     const vw = Math.max(320, window.innerWidth || 1200);
-    const base = pose === "point" ? 420 : pose === "checklist" ? 400 : 390;
-    const maxW = vw < 520 ? 260 : vw < 900 ? 340 : 420;
+    const base = pose === "point" ? 430 : pose === "checklist" ? 410 : 395;
+    const maxW = vw < 520 ? 280 : vw < 900 ? 360 : 430;
     c.img.style.width = `${Math.min(base, maxW)}px`;
   }
 
@@ -385,45 +420,56 @@ const canvas =
   // Highlight target
   // --------------------------
   function clearCoachTargetHighlight() {
-    if (coachLastTarget) coachLastTarget.classList.remove("astra-coach--target");
+    if (coachLastTarget && coachLastTarget.classList) {
+      coachLastTarget.classList.remove("astra-coach--target");
+    }
     coachLastTarget = null;
   }
 
   function applyCoachTargetHighlight(targetEl) {
     clearCoachTargetHighlight();
-    if (!targetEl) return;
+    if (!targetEl || !targetEl.classList) return;
     targetEl.classList.add("astra-coach--target");
     coachLastTarget = targetEl;
   }
 
   // --------------------------
-  // Positioning (burbuja + linea + astra)
+  // Positioning (burbuja cerca del recuadro + Astra afuera apuntando)
   // --------------------------
   function positionCoachToTarget(targetEl) {
     const c = ensureCoach();
-    const pad = 10;
-
+    const pad = 12;
     if (!targetEl || !isVisible(targetEl)) return;
 
     const r = targetEl.getBoundingClientRect();
     const cx = r.left + r.width / 2;
     const cy = r.top + r.height / 2;
 
-    // medir burbuja real
+    // medir burbuja
     c.bubble.style.visibility = "hidden";
     c.bubble.style.left = `${pad}px`;
     c.bubble.style.top = `${pad}px`;
-    const bw = c.bubble.offsetWidth || 280;
-    const bh = c.bubble.offsetHeight || 140;
+    const bw = c.bubble.offsetWidth || 320;
+    const bh = c.bubble.offsetHeight || 150;
     c.bubble.style.visibility = "visible";
 
-    // opciones alrededor del target
-    const candidates = [
-      { name: "right",  x: r.right + 14,     y: cy - bh / 2 },
-      { name: "left",   x: r.left - bw - 14, y: cy - bh / 2 },
-      { name: "bottom", x: cx - bw / 2,      y: r.bottom + 14 },
-      { name: "top",    x: cx - bw / 2,      y: r.top - bh - 14 },
-    ];
+    // preferencia: burbuja pegada al recuadro
+    // si target está a la derecha, burbuja a la izquierda (como tu imagen 2/3)
+    const preferLeft = cx > window.innerWidth * 0.6;
+
+    const candidates = preferLeft
+      ? [
+          { name: "left",   x: r.left - bw - 14, y: cy - bh / 2 },
+          { name: "bottom", x: cx - bw / 2,      y: r.bottom + 14 },
+          { name: "top",    x: cx - bw / 2,      y: r.top - bh - 14 },
+          { name: "right",  x: r.right + 14,     y: cy - bh / 2 },
+        ]
+      : [
+          { name: "right",  x: r.right + 14,     y: cy - bh / 2 },
+          { name: "bottom", x: cx - bw / 2,      y: r.bottom + 14 },
+          { name: "top",    x: cx - bw / 2,      y: r.top - bh - 14 },
+          { name: "left",   x: r.left - bw - 14, y: cy - bh / 2 },
+        ];
 
     const fits = (x, y) =>
       x >= pad &&
@@ -439,54 +485,51 @@ const canvas =
     c.bubble.style.left = `${bx}px`;
     c.bubble.style.top = `${by}px`;
 
-    // punto en target
+    // dot al centro del target
     c.dot.style.left = `${cx - 5}px`;
     c.dot.style.top = `${cy - 5}px`;
 
-    // linea: del centro burbuja al target
+    // linea del centro burbuja al target
     const bcx = bx + bw / 2;
     const bcy = by + bh / 2;
     const dx = cx - bcx;
     const dy = cy - bcy;
     const ang = Math.atan2(dy, dx);
-    const len = Math.max(40, Math.hypot(dx, dy) - 18);
+    const len = Math.max(45, Math.hypot(dx, dy) - 18);
 
     c.line.style.left = `${bcx}px`;
     c.line.style.top = `${bcy}px`;
     c.line.style.width = `${len}px`;
     c.line.style.transform = `rotate(${ang}rad)`;
 
-    // Astra en el lado OPUESTO a la burbuja para no taparla
-    const imgW = parseFloat(getComputedStyle(c.img).width) || 360;
+    // Astra: siempre al lado opuesto de la burbuja (afuera) para que apunte al recuadro
+    const imgW = parseFloat(getComputedStyle(c.img).width) || 380;
     const imgH = imgW * 1.05;
+
+    const offX = imgW * 0.85;
+    const offY = imgH * 0.15;
 
     let ax = cx;
     let ay = cy;
 
-    // offsets suaves (no "tapa" burbuja)
-    const offX = imgW * 0.75;
-    const offY = imgH * 0.25;
-
-    if (chosen.name === "right") { ax = cx - offX; ay = cy + offY; }
     if (chosen.name === "left")  { ax = cx + offX; ay = cy + offY; }
-    if (chosen.name === "top")   { ax = cx - offX * 0.35; ay = cy + imgH * 0.60; }
-    if (chosen.name === "bottom"){ ax = cx - offX * 0.35; ay = cy - imgH * 0.35; }
+    if (chosen.name === "right") { ax = cx - offX; ay = cy + offY; }
+    if (chosen.name === "top")   { ax = cx - imgW * 0.20; ay = cy + imgH * 0.70; }
+    if (chosen.name === "bottom"){ ax = cx - imgW * 0.20; ay = cy - imgH * 0.40; }
 
-    // permite un poco afuera, pero controlado
-    ax = clamp(ax, -60, window.innerWidth + 60);
-    ay = clamp(ay, -60, window.innerHeight + 60);
+    ax = clamp(ax, -80, window.innerWidth + 80);
+    ay = clamp(ay, -80, window.innerHeight + 80);
 
     c.img.style.left = `${ax}px`;
     c.img.style.top = `${ay}px`;
   }
 
   // --------------------------
-  // Public show/hide (NECESARIO para showOnly/INIT)
+  // Public show/hide
   // --------------------------
   function showCoach({ target, text, pose = "point", step = 1, total = 4, autoCloseMs = 0 } = {}) {
     const c = ensureCoach();
 
-    // cleanup previo
     c._cleanup?.();
     c._cleanup = null;
 
@@ -503,7 +546,10 @@ const canvas =
     c.root.style.display = "block";
     applyCoachTargetHighlight(target);
 
-    scrollIntoViewSmart(target);
+    // si es target real, lo centramos
+    if (!target.classList?.contains("astra-virtual-target")) {
+      scrollIntoViewSmart(target);
+    }
 
     requestAnimationFrame(() => positionCoachToTarget(target));
 
@@ -545,19 +591,18 @@ const canvas =
     try { return localStorage.getItem(COACH_KEY) !== "1"; } catch { return true; }
   }
 
-  // Exporta para el resto de planner.js (evita ReferenceError)
+  // Exporta para evitar ReferenceError
   A.showCoach = showCoach;
   A.hideCoach = hideCoach;
   A.shouldAutoCoach = shouldAutoCoach;
 
-  // Back-compat (tu archivo llama showCoach/hideCoach/shouldAutoCoach directo)
+  // Back-compat por si lo llamas directo
   window.showCoach = showCoach;
   window.hideCoach = hideCoach;
   window.shouldAutoCoach = shouldAutoCoach;
 
-
   // --------------------------
-  // TOUR (simple, sin abrir paneles)
+  // TOUR (sin abrir paneles, con target virtual derecha)
   // --------------------------
   function getTourSteps() {
     const role = getRoleSafe();
@@ -573,7 +618,6 @@ const canvas =
     const btnGuide = document.getElementById("btnGuide");
     const btnVerResumen = document.getElementById("btnVerResumen");
 
-    // fallbacks seguros (si no hay targets visibles)
     const safeHomeTarget = () =>
       pickTarget([firstSubp, "#subprogramasField", ".constellation", ".astra-brand"]) ||
       document.querySelector(".astra-brand") ||
@@ -584,14 +628,21 @@ const canvas =
       document.querySelector(".astra-brand") ||
       document.body;
 
+    // 👇 target virtual para "panel derecho" (como tu dibujo del cuadro a la derecha)
+    const rightPanelAnchor = () =>
+      ensureVirtualTarget("astraVirtualRightPanel", {
+        left: "76%",
+        top: "42%",
+        width: "20%",
+        height: "30%",
+      });
+
     if (role === "admin") {
       return [
         {
           pose: "saludo",
           text: "Hola 👋 Soy Astra. Guia rapida en 4 pasos.",
-          target: () =>
-            pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar", ".astra-brand"]) ||
-            safeBtnTarget(),
+          target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar", ".astra-brand"]) || safeBtnTarget(),
         },
         {
           pose: "point",
@@ -611,7 +662,7 @@ const canvas =
       ];
     }
 
-    // IES (cliente): NO abrimos panel, NO hacemos click, solo indicamos
+    // IES (cliente)
     return [
       {
         pose: "saludo",
@@ -626,10 +677,8 @@ const canvas =
       {
         pose: "checklist",
         text: "Paso 2: cuando se abra el panel derecho, elige un submodulo para registrar evidencias.",
-        target: () =>
-          pickTarget(["#submodsCanvas", "#submodulosList"]) ||
-          pickTarget([firstSubp, field]) ||
-          safeHomeTarget(),
+        // 👇 SI el offcanvas está visible, lo usamos. Si NO, usamos el target virtual a la derecha.
+        target: () => pickTarget(["#submodsCanvas.show", "#submodulosList"]) || rightPanelAnchor(),
       },
       {
         pose: "exit",
@@ -647,7 +696,6 @@ const canvas =
     const idx = Math.max(0, Math.min(coachStep, total - 1));
     const s = steps[idx];
 
-    // NO before() => nunca abre paneles ni hace clicks
     setTimeout(() => {
       const target = (typeof s.target === "function") ? s.target() : s.target;
       const fallback = document.querySelector(".astra-brand") || document.body;
@@ -662,17 +710,11 @@ const canvas =
     }, 60);
   }
 
-  function tourStart() {
-    coachStep = 0;
-    renderTourStep();
-  }
+  function tourStart() { coachStep = 0; renderTourStep(); }
 
   function tourNext() {
     const steps = getTourSteps();
-    if (coachStep >= steps.length - 1) {
-      hideCoach(true);
-      return;
-    }
+    if (coachStep >= steps.length - 1) { hideCoach(true); return; }
     coachStep += 1;
     renderTourStep();
   }
@@ -686,7 +728,7 @@ const canvas =
   // API boton "Guia"
   A.openGuide = function () { tourStart(); };
 
-  // Si existe el botón, lo cableamos (sin duplicar)
+  // Cablear botón Guía (sin duplicar)
   const btnGuideEl = document.getElementById("btnGuide");
   if (btnGuideEl && !btnGuideEl.dataset.wiredGuide) {
     btnGuideEl.dataset.wiredGuide = "1";
@@ -696,14 +738,15 @@ const canvas =
     });
   }
 
-  // Auto onboarding (solo 1 vez)
-  // planner.js ya corre en DOMContentLoaded, NO metas otro listener
+  // Auto onboarding (solo 1 vez) — sin DOMContentLoaded extra
   function autoStartIfNeeded() {
     if (!shouldAutoCoach()) return;
     setTimeout(() => { try { tourStart(); } catch {} }, 350);
   }
   autoStartIfNeeded();
-})();
+
+})(); // ✅ cierre correcto del IIFE
+
 
 
 
