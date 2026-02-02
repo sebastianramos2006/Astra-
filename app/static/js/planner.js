@@ -1176,6 +1176,50 @@ document.addEventListener("DOMContentLoaded", async () => {
     throw lastErr || new Error("No se pudo completar la solicitud.");
   }
 
+  // ============================================================
+  // FIX 405: GET "real" sin depender de core.js (A.api)
+  // ============================================================
+  async function apiGetRaw(path) {
+    const url = path.startsWith("http") ? path : `${path}`;
+
+    const headers = new Headers();
+    const t = getToken();
+    if (t) headers.set("Authorization", `Bearer ${t}`);
+
+    const res = await fetch(url, { method: "GET", headers });
+
+    const ct = res.headers.get("content-type") || "";
+    const body = ct.includes("application/json")
+      ? await res.json().catch(() => null)
+      : await res.text().catch(() => "");
+
+    if (!res.ok) {
+      const msg =
+        (body && typeof body === "object" && (body.detail || body.message)) ||
+        (typeof body === "string" && body) ||
+        `HTTP ${res.status}`;
+      const err = new Error(msg);
+      err.status = res.status;
+      err.body = body;
+      throw err;
+    }
+    return body;
+  }
+
+  async function apiTryGET(paths = []) {
+    let lastErr = null;
+    for (const p of paths) {
+      try {
+        return await apiGetRaw(p);
+      } catch (e) {
+        lastErr = e;
+        const st = getHttpStatus(e);
+        // fallback solo en 404/405
+        if (st !== 404 && st !== 405) throw e;
+      }
+    }
+    throw lastErr || new Error("No se pudo completar GET.");
+  }
 
   // ============================================================
   // Render tabla operativa
@@ -1755,11 +1799,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function fetchEvidencias(submoduloId) {
-    return await apiTry(evidenciasPathsForSubmodulo(submoduloId));
+    return await apiTryGET(evidenciasPathsForSubmodulo(submoduloId));
   }
 
   async function fetchResumenSubmodulo(submoduloId) {
-    return await apiTry(resumenPathsForSubmodulo(submoduloId));
+    return await apiTryGET(resumenPathsForSubmodulo(submoduloId));
   }
 
   async function saveEvidenciaPatch(evidenciaId, payload) {
