@@ -1799,11 +1799,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   async function fetchEvidencias(submoduloId) {
-    return await apiTryGET(evidenciasPathsForSubmodulo(submoduloId));
+    return await apiTry(evidenciasPathsForSubmodulo(submoduloId), { method: "GET" });
   }
 
   async function fetchResumenSubmodulo(submoduloId) {
-    return await apiTryGET(resumenPathsForSubmodulo(submoduloId));
+    return await apiTry(resumenPathsForSubmodulo(submoduloId), { method: "GET" });
   }
 
   async function saveEvidenciaPatch(evidenciaId, payload) {
