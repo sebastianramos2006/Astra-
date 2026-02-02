@@ -375,30 +375,48 @@
         const api = (typeof A.api === "function") ? A.api : null;
         if (!api) throw new Error("A.api no está disponible (core.js).");
 
-        const candidates = [
+        // Rutas posibles (incluyo variantes con slash final)
+        const paths = [
           "/auth/me/password",
+          "/auth/me/password/",
           "/auth/change-password",
+          "/auth/change-password/",
           "/users/me/password",
+          "/users/me/password/",
           "/usuarios/me/password",
+          "/usuarios/me/password/",
         ];
+
+        // Métodos típicos para cambio de clave (muchos backends usan PATCH/PUT)
+        const methods = ["PATCH", "PUT", "POST"];
 
         let lastErr = null;
 
-        for (const path of candidates) {
-          try {
-            return await api(path, {
-              method: "POST",
-              body: JSON.stringify(payload),
-            });
-          } catch (e) {
-            const status = e?.status || e?.response?.status || null;
-            if (status === 404) { lastErr = e; continue; } // prueba el siguiente
-            lastErr = e;
-            throw e; // errores reales (401/403/422/500) se muestran
+        for (const path of paths) {
+          for (const method of methods) {
+            try {
+              return await api(path, {
+                method,
+                body: JSON.stringify(payload),
+              });
+            } catch (e) {
+              const status = e?.status || e?.response?.status || null;
+
+              // 404: no existe esa ruta -> probar siguiente
+              if (status === 404) { lastErr = e; continue; }
+
+              // 405: ruta existe pero método no permitido -> probar siguiente método (o siguiente ruta)
+              if (status === 405) { lastErr = e; continue; }
+
+              // Otros errores: son "reales" (401/403/422/500) y conviene mostrarlos
+              lastErr = e;
+              throw e;
+            }
           }
         }
-        throw lastErr || new Error("No existe endpoint de cambio de clave.");
-      }
+
+        throw lastErr || new Error("No existe endpoint compatible para cambio de clave.");
+     }
 
       document.getElementById("btnSavePw")?.addEventListener("click", async () => {
         const oldPw = (document.getElementById("pwOld")?.value || "").trim();
