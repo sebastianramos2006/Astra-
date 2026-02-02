@@ -1158,9 +1158,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   // ============================================================
   async function apiTry(paths = [], opts = {}) {
     let lastErr = null;
+
+    // FIX: si no especificas method, fuerza GET (evita 405 si core.js manda POST por defecto)
+    const finalOpts = { ...opts };
+    if (!finalOpts.method) finalOpts.method = "GET";
+
     for (const p of paths) {
       try {
-        return await A.api(p, opts);
+        return await A.api(p, finalOpts);
       } catch (e) {
         lastErr = e;
         const st = getHttpStatus(e);
@@ -1170,6 +1175,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     throw lastErr || new Error("No se pudo completar la solicitud.");
   }
+
 
   // ============================================================
   // Render tabla operativa
