@@ -429,11 +429,13 @@
         try {
           setPwMsg("Guardando…", true);
 
-          await callChangePassword({
-            old_password: oldPw,
-            new_password: newPw,
-          });
+        await callChangePassword({
+          current_password: oldPw,
+          old_password: oldPw,
+          new_password: newPw,
+        });
 
+        
           setPwMsg("Clave actualizada ✓", true);
 
           // Limpia
