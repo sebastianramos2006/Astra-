@@ -787,12 +787,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         return [
           {
             pose: "saludo",
-            text: "Hola 👋 Soy Astra. Guia rapida en 4 pasos.",
+            text: "Hola 👋 Soy Astra. Te dejo una guia super rapida.",
             target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar", ".astra-brand"]) || safeBtnTarget(),
           },
           {
             pose: "point",
-            text: "Paso 1: selecciona una IES (arriba) para ver su informacion.",
+            text:"Paso 1: selecciona una IES para ver su informacion.",
             target: () => pickTarget([iesSelect, "#iesSelect", adminBar, "#adminIesBar"]) || safeBtnTarget(),
           },
           {
@@ -802,7 +802,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           },
           {
             pose: "exit",
-            text: "Listo. Si quieres ver esta guia otra vez, usa el boton Guia.",
+            text: "Paso 3: en Cuenta puedes cambiar la clave de una IES. Y si ya terminaste, usa Salir.",
             target: () => pickTarget([btnGuide, "#btnGuide", btnResumenGlobal, ".astra-brand"]) || safeBtnTarget(),
           },
         ];
@@ -811,7 +811,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       return [
         {
           pose: "saludo",
-          text: "Hola 👋 Soy Astra. Te muestro como usar ASTRA rapido.",
+          text: "Hola 👋 Soy Astra. Te muestro como usar ASTRA en 3 pasos.",
           target: () => safeHomeTarget(),
         },
         {
@@ -821,12 +821,12 @@ document.addEventListener("DOMContentLoaded", async () => {
         },
         {
           pose: "checklist",
-          text: "Paso 2: cuando se abra el panel derecho, elige un submodulo para registrar evidencias.",
+          text: "Paso 2: en el panel derecho, elige un submodulo para registrar evidencias.",
           target: () => pickTarget(["#submodsCanvas.show", "#submodulosList"]) || rightPanelAnchor(),
         },
         {
           pose: "exit",
-          text: "Paso 3: luego usa 'Ver resumen' para revisar el avance cuando quieras.",
+          text: "Paso 3: usa 'Ver resumen' para revisar el avance. En Cuenta puedes cambiar tu clave temporal.",
           target: () => pickTarget([btnVerResumen, "#btnVerResumen", btnReset, "#btnReset", btnGuide, "#btnGuide"]) || safeBtnTarget(),
         },
       ];
